@@ -49,6 +49,16 @@ async function handleVault(req, res, url) {
   await mkdir(vaultDir, { recursive: true });
 
   if (req.method === 'GET') {
+    if (url.searchParams.get('status') === '1') {
+      sendJson(res, 200, {
+        ok: true,
+        syncConfigured: true,
+        mode: 'local-dev',
+        storage: '.local/vaults',
+      });
+      return;
+    }
+
     const familyId = url.searchParams.get('familyId');
     const path = familyPath(familyId);
     if (!familyId || !/^[a-f0-9]{32,64}$/.test(familyId) || !existsSync(path)) {

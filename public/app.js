@@ -447,9 +447,29 @@ async function mutateData(mutator) {
   scheduleSync();
 }
 
+function updateConnectionBanner() {
+  const banner = document.getElementById('offline-banner');
+  if (!banner) return;
+
+  banner.classList.toggle('offline-banner--sync-disabled', _cloudSyncDisabled);
+  if (_cloudSyncDisabled) {
+    banner.textContent = 'Cloud sync is not configured. Same-key users will not share data until Vercel Blob is connected.';
+    banner.classList.remove('hidden');
+    return;
+  }
+
+  banner.textContent = 'Saved here. Cloud sync will resume when this device is back online.';
+  banner.classList.toggle('hidden', !_isOffline);
+}
+
 function setOffline(offline) {
   _isOffline = offline;
-  document.getElementById('offline-banner').classList.toggle('hidden', !offline);
+  updateConnectionBanner();
+}
+
+function setCloudSyncDisabled(disabled) {
+  _cloudSyncDisabled = disabled;
+  updateConnectionBanner();
 }
 
 function setSetupStatus(message, isError = false) {
@@ -467,7 +487,7 @@ function setSyncStatus(title, detail) {
 
 function syncDetailText() {
   if (!session?.familyId) return 'No access key on this device';
-  if (_cloudSyncDisabled) return 'Local only - add Vercel Blob for sync';
+  if (_cloudSyncDisabled) return 'Local only - Vercel Blob not connected';
   if (_isOffline) return 'Waiting for connection';
   if (session.lastSyncedAt) return `Last synced ${formatElapsed(Date.now() - new Date(session.lastSyncedAt).getTime())}`;
   return 'Ready to sync';
@@ -518,12 +538,12 @@ async function syncNow({ quiet = false, force = false } = {}) {
 
   syncInFlight = (async () => {
     if (!quiet) setSyncStatus('Encrypted sync', 'Syncing...');
-    if (force) _cloudSyncDisabled = false;
+    if (force) setCloudSyncDisabled(false);
     for (let attempt = 0; attempt < 3; attempt++) {
       const localBefore = normalizeData(data || (await loadData()));
       const remote = await fetchRemoteVault();
       if (remote.syncDisabled) {
-        _cloudSyncDisabled = true;
+        setCloudSyncDisabled(true);
         setOffline(false);
         updateSyncUi();
         return;
@@ -557,13 +577,13 @@ async function syncNow({ quiet = false, force = false } = {}) {
       const put = await putRemoteVault(envelope, baseEtag);
       if (put.conflict) continue;
       if (put.syncDisabled) {
-        _cloudSyncDisabled = true;
+        setCloudSyncDisabled(true);
         setOffline(false);
         updateSyncUi();
         return;
       }
 
-      _cloudSyncDisabled = false;
+      setCloudSyncDisabled(false);
       session.remoteEtag = put.etag || null;
       session.lastSyncedAt = nowIso();
       await persistSession();
@@ -617,7 +637,7 @@ async function unlockWithAccessKey(rawKey) {
   try {
     const remote = await fetchRemoteVault();
     if (remote.syncDisabled) {
-      _cloudSyncDisabled = true;
+      setCloudSyncDisabled(true);
       if (hasLocalVault) {
         await loadData();
       } else {

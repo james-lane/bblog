@@ -32,6 +32,8 @@ For encrypted multi-device sync, add Vercel Blob storage to the project. Vercel 
 
 The sync API uses Vercel Blob private storage through `@vercel/blob`. The API is intentionally small, so another host can replace `api/vault.js` with S3, R2, Supabase Storage, or another object store as long as it preserves the same `GET` and `PUT` JSON contract.
 
+To check whether a deployed instance can share data between devices, open `/api/vault?status=1` on that deployment. It should return `"syncConfigured":true`. If it returns `"mode":"local-only"`, the app will run on each device but same-key users will not share data until Vercel Blob is connected.
+
 ## API contract
 
 `GET /api/vault?familyId=<hex>` returns:

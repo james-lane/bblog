@@ -71,6 +71,16 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const url = new URL(req.url, 'https://bblog.local');
+      if (url.searchParams.get('status') === '1') {
+        sendJson(res, 200, {
+          ok: true,
+          syncConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+          mode: process.env.BLOB_READ_WRITE_TOKEN ? 'cloud' : 'local-only',
+          storage: 'vercel-blob',
+        });
+        return;
+      }
+
       const familyId = url.searchParams.get('familyId');
       if (!validateFamilyId(familyId)) {
         sendJson(res, 400, { error: 'invalid_family_id' });
