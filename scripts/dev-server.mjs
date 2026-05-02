@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,8 +35,40 @@ function familyPath(familyId) {
   return join(vaultDir, `${familyId}.json`);
 }
 
+function deviceDir(familyId) {
+  return join(vaultDir, familyId, 'devices');
+}
+
+function devicePath(familyId, deviceId) {
+  return join(deviceDir(familyId), `${deviceId}.json`);
+}
+
 function etagFor(text) {
   return `"${createHash('sha256').update(text).digest('hex')}"`;
+}
+
+async function readLocalVault(path, source) {
+  if (!existsSync(path)) return null;
+  const text = await readFile(path, 'utf8');
+  return {
+    source,
+    pathname: path,
+    etag: etagFor(text),
+    uploadedAt: null,
+    vault: JSON.parse(text),
+  };
+}
+
+async function readDeviceVaults(familyId) {
+  const dir = deviceDir(familyId);
+  if (!existsSync(dir)) return [];
+  const names = await readdir(dir);
+  const vaults = await Promise.all(
+    names
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => readLocalVault(join(dir, name), 'device')),
+  );
+  return vaults.filter(Boolean);
 }
 
 async function readBody(req) {
@@ -61,26 +93,49 @@ async function handleVault(req, res, url) {
 
     const familyId = url.searchParams.get('familyId');
     const path = familyPath(familyId);
-    if (!familyId || !/^[a-f0-9]{32,64}$/.test(familyId) || !existsSync(path)) {
-      sendJson(res, 200, { exists: false });
+    if (!familyId || !/^[a-f0-9]{32,64}$/.test(familyId)) {
+      sendJson(res, 200, { exists: false, vaults: [] });
       return;
     }
-    const text = await readFile(path, 'utf8');
+
+    const vaults = [
+      await readLocalVault(path, 'legacy'),
+      ...(await readDeviceVaults(familyId)),
+    ].filter(Boolean);
+    if (!vaults.length) {
+      sendJson(res, 200, { exists: false, vaults: [] });
+      return;
+    }
+
+    const latest = vaults.at(-1);
     sendJson(res, 200, {
       exists: true,
-      etag: etagFor(text),
-      vault: JSON.parse(text),
+      etag: latest.etag,
+      vault: latest.vault,
+      vaults,
     });
     return;
   }
 
   if (req.method === 'PUT') {
     const body = await readBody(req);
-    const { familyId, baseEtag, vault } = body;
+    const { familyId, baseEtag, deviceId, vault } = body;
     if (!familyId || !/^[a-f0-9]{32,64}$/.test(familyId) || !vault) {
       sendJson(res, 400, { error: 'invalid_vault' });
       return;
     }
+    if (deviceId) {
+      if (!/^[a-z0-9_-]{8,96}$/.test(deviceId)) {
+        sendJson(res, 400, { error: 'invalid_device_id' });
+        return;
+      }
+      await mkdir(deviceDir(familyId), { recursive: true });
+      const text = JSON.stringify(vault);
+      await writeFile(devicePath(familyId, deviceId), text, 'utf8');
+      sendJson(res, 200, { ok: true, etag: etagFor(text), snapshot: true });
+      return;
+    }
+
     const path = familyPath(familyId);
     if (baseEtag && existsSync(path)) {
       const current = await readFile(path, 'utf8');

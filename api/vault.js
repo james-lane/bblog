@@ -1,4 +1,4 @@
-import { get, put } from '@vercel/blob';
+import { get, list, put } from '@vercel/blob';
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const FAMILY_RE = /^[a-f0-9]{32,64}$/;
@@ -6,6 +6,14 @@ const VAULT_PREFIX = 'bblog/v1/vaults';
 
 function vaultPath(familyId) {
   return `${VAULT_PREFIX}/${familyId}.json`;
+}
+
+function snapshotPrefix(familyId) {
+  return `${VAULT_PREFIX}/${familyId}/devices/`;
+}
+
+function snapshotPath(familyId, deviceId) {
+  return `${snapshotPrefix(familyId)}${deviceId}.json`;
 }
 
 function sendJson(res, status, payload) {
@@ -17,6 +25,10 @@ function sendJson(res, status, payload) {
 
 function validateFamilyId(familyId) {
   return typeof familyId === 'string' && FAMILY_RE.test(familyId);
+}
+
+function validateDeviceId(deviceId) {
+  return typeof deviceId === 'string' && /^[a-z0-9_-]{8,96}$/.test(deviceId);
 }
 
 async function readRequestJson(req) {
@@ -39,6 +51,36 @@ async function readRequestJson(req) {
 
 async function streamToText(stream) {
   return new Response(stream).text();
+}
+
+async function readVaultBlob(pathname, source) {
+  const result = await get(pathname, { access: 'private', useCache: false });
+  if (!result || result.statusCode !== 200) return null;
+  const text = await streamToText(result.stream);
+  return {
+    source,
+    pathname,
+    etag: result.blob.etag,
+    uploadedAt: result.blob.uploadedAt,
+    vault: JSON.parse(text),
+  };
+}
+
+async function listSnapshotBlobs(familyId) {
+  const blobs = [];
+  let cursor;
+
+  do {
+    const page = await list({
+      prefix: snapshotPrefix(familyId),
+      limit: 1000,
+      ...(cursor ? { cursor } : {}),
+    });
+    blobs.push(...page.blobs);
+    cursor = page.hasMore ? page.cursor : null;
+  } while (cursor);
+
+  return blobs;
 }
 
 function isBlobMissing(error) {
@@ -102,21 +144,33 @@ export default async function handler(req, res) {
       }
 
       try {
-        const result = await get(vaultPath(familyId), { access: 'private' });
-        if (!result || result.statusCode !== 200) {
-          sendJson(res, 200, { exists: false });
+        const vaults = [];
+        const legacyVault = await readVaultBlob(vaultPath(familyId), 'legacy');
+        if (legacyVault) vaults.push(legacyVault);
+
+        const snapshots = await listSnapshotBlobs(familyId);
+        const snapshotVaults = await Promise.all(
+          snapshots.map((blob) => readVaultBlob(blob.pathname, 'device').catch(() => null)),
+        );
+        vaults.push(...snapshotVaults.filter(Boolean));
+
+        vaults.sort((a, b) => new Date(a.uploadedAt || 0) - new Date(b.uploadedAt || 0));
+
+        if (!vaults.length) {
+          sendJson(res, 200, { exists: false, vaults: [] });
           return;
         }
 
-        const text = await streamToText(result.stream);
+        const latest = vaults.at(-1);
         sendJson(res, 200, {
           exists: true,
-          etag: result.blob.etag,
-          vault: JSON.parse(text),
+          etag: latest.etag,
+          vault: latest.vault,
+          vaults,
         });
       } catch (error) {
         if (isBlobMissing(error)) {
-          sendJson(res, 200, { exists: false });
+          sendJson(res, 200, { exists: false, vaults: [] });
           return;
         }
         throw error;
@@ -126,7 +180,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const body = await readRequestJson(req);
-      const { familyId, baseEtag, vault } = body;
+      const { familyId, baseEtag, deviceId, vault } = body;
       if (!validateFamilyId(familyId) || !vault || typeof vault !== 'object') {
         sendJson(res, 400, { error: 'invalid_vault' });
         return;
@@ -138,6 +192,23 @@ export default async function handler(req, res) {
           syncDisabled: true,
           message: 'Cloud sync is not configured. The app is running in local-only mode.',
         });
+        return;
+      }
+
+      if (deviceId) {
+        if (!validateDeviceId(deviceId)) {
+          sendJson(res, 400, { error: 'invalid_device_id' });
+          return;
+        }
+
+        const blob = await put(snapshotPath(familyId, deviceId), JSON.stringify(vault), {
+          access: 'private',
+          allowOverwrite: true,
+          cacheControlMaxAge: 60,
+          contentType: 'application/json; charset=utf-8',
+        });
+
+        sendJson(res, 200, { ok: true, etag: blob.etag, snapshot: true });
         return;
       }
 

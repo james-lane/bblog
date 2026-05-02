@@ -2,11 +2,10 @@ const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
 const SESSION_KEY = 'vault-session';
+const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
 const MILK_UNIT = 'ml';
 const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
-const SYNC_MAX_ATTEMPTS = 8;
-const SYNC_CONFLICT_DELAY_MS = 350;
 const SYNC_RETRY_DELAY_MS = 3000;
 
 const formState = {
@@ -56,10 +55,6 @@ function requireVaultCrypto() {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uid(prefix = '') {
@@ -138,6 +133,18 @@ function generateAccessKey() {
   requireRandomCrypto().getRandomValues(bytes);
   const hex = bytesToHex(bytes);
   return `bb-${hex.match(/.{1,4}/g).join('-')}`;
+}
+
+async function ensureDeviceId() {
+  let deviceId = session?.deviceId || (await kvGet(DEVICE_ID_KEY));
+  if (!deviceId) {
+    const bytes = new Uint8Array(12);
+    requireRandomCrypto().getRandomValues(bytes);
+    deviceId = `device_${bytesToHex(bytes)}`;
+    await kvSet(DEVICE_ID_KEY, deviceId);
+  }
+  if (session) session.deviceId = deviceId;
+  return deviceId;
 }
 
 function normalizeAccessKey(accessKey) {
@@ -225,6 +232,21 @@ async function decryptVault(envelope) {
     base64ToBytes(envelope.cipher.data),
   );
   return normalizeData(JSON.parse(dec.decode(plaintext)));
+}
+
+async function decryptRemoteVaults(remote) {
+  const envelopes = Array.isArray(remote?.vaults)
+    ? remote.vaults.map((item) => item?.vault || item).filter(Boolean)
+    : remote?.vault
+      ? [remote.vault]
+      : [];
+
+  let merged = null;
+  for (const envelope of envelopes) {
+    const plain = await decryptVault(envelope);
+    merged = merged ? mergeVaults(merged, plain) : plain;
+  }
+  return merged;
 }
 
 function stamped(item, stamp) {
@@ -516,10 +538,11 @@ async function fetchRemoteVault() {
 }
 
 async function putRemoteVault(vault, baseEtag) {
+  const deviceId = await ensureDeviceId();
   const res = await fetch('/api/vault', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ familyId: session.familyId, baseEtag, vault }),
+    body: JSON.stringify({ familyId: session.familyId, baseEtag, deviceId, vault }),
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 409) return { conflict: true };
@@ -546,67 +569,46 @@ async function syncNow({ quiet = false, force = false } = {}) {
   syncInFlight = (async () => {
     if (!quiet) setSyncStatus('Encrypted sync', 'Syncing...');
     if (force) setCloudSyncDisabled(false);
-    for (let attempt = 0; attempt < SYNC_MAX_ATTEMPTS; attempt++) {
-      const localBefore = normalizeData(data || (await loadData()));
-      const remote = await fetchRemoteVault();
-      if (remote.syncDisabled) {
-        setCloudSyncDisabled(true);
-        setOffline(false);
-        updateSyncUi();
-        return;
-      }
-      let merged = localBefore;
-      let remotePlain = null;
-      let baseEtag = remote.etag || null;
-
-      if (remote.exists) {
-        remotePlain = await decryptVault(remote.vault);
-        merged = mergeVaults(localBefore, remotePlain);
-        if (comparable(merged) !== comparable(localBefore)) {
-          await saveData(merged);
-          renderAll();
-        }
-      } else if (!session.salt) {
-        session.salt = randomBase64(16);
-      }
-
-      if (remotePlain && comparable(merged) === comparable(remotePlain)) {
-        session.remoteEtag = baseEtag;
-        session.lastSyncedAt = nowIso();
-        await persistSession();
-        setOffline(false);
-        updateSyncUi();
-        return;
-      }
-
-      const envelope = await encryptVault(merged);
-      await persistSession();
-      const put = await putRemoteVault(envelope, baseEtag);
-      if (put.conflict) {
-        setOffline(false);
-        setSyncStatus('Encrypted sync', 'Cloud changed - merging...');
-        await wait(SYNC_CONFLICT_DELAY_MS * (attempt + 1));
-        continue;
-      }
-      if (put.syncDisabled) {
-        setCloudSyncDisabled(true);
-        setOffline(false);
-        updateSyncUi();
-        return;
-      }
-
-      setCloudSyncDisabled(false);
-      session.remoteEtag = put.etag || null;
-      session.lastSyncedAt = nowIso();
-      await persistSession();
+    const localBefore = normalizeData(data || (await loadData()));
+    const remote = await fetchRemoteVault();
+    if (remote.syncDisabled) {
+      setCloudSyncDisabled(true);
       setOffline(false);
       updateSyncUi();
       return;
     }
 
+    const remotePlain = remote.exists ? await decryptRemoteVaults(remote) : null;
+    const merged = remotePlain ? mergeVaults(localBefore, remotePlain) : localBefore;
+    if (!session.salt) session.salt = randomBase64(16);
+
+    if (comparable(merged) !== comparable(localBefore)) {
+      await saveData(merged);
+      renderAll();
+    }
+
+    const envelope = await encryptVault(merged);
+    await persistSession();
+    const put = await putRemoteVault(envelope, remote.etag || null);
+    if (put.conflict) {
+      setOffline(false);
+      setSyncStatus('Encrypted sync', 'Cloud changed - retrying soon...');
+      scheduleSync(SYNC_RETRY_DELAY_MS);
+      return;
+    }
+    if (put.syncDisabled) {
+      setCloudSyncDisabled(true);
+      setOffline(false);
+      updateSyncUi();
+      return;
+    }
+
+    setCloudSyncDisabled(false);
+    session.remoteEtag = put.etag || null;
+    session.lastSyncedAt = nowIso();
+    await persistSession();
     setOffline(false);
-    setSyncStatus('Encrypted sync', 'Cloud changed - retrying soon...');
-    scheduleSync(SYNC_RETRY_DELAY_MS);
+    updateSyncUi();
   })()
     .catch((error) => {
       setOffline(true);
@@ -646,6 +648,7 @@ async function unlockWithAccessKey(rawKey) {
     accessKey,
     rememberKey,
   };
+  await ensureDeviceId();
   await persistSession();
 
   try {
@@ -662,8 +665,8 @@ async function unlockWithAccessKey(rawKey) {
       setSetupStatus('');
       return;
     }
-    if (remote.exists && !hasLocalVault) {
-      const remotePlain = await decryptVault(remote.vault);
+    const remotePlain = remote.exists ? await decryptRemoteVaults(remote) : null;
+    if (remotePlain && !hasLocalVault) {
       session.remoteEtag = remote.etag || null;
       session.lastSyncedAt = nowIso();
       await saveData(remotePlain);
@@ -1642,6 +1645,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSession();
 
   if (session?.familyId && session?.accessKey) {
+    await ensureDeviceId();
     await loadData();
     document.getElementById('remember-key-input').checked = session.rememberKey !== false;
     showApp();
