@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="bblog" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
+  <title>bblog</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <div id="offline-banner" class="offline-banner hidden">
+    Saved here. Cloud sync will resume when this device is back online.
+  </div>
+
+  <section id="setup-screen" class="setup-screen">
+    <div class="setup-panel">
+      <h1>bblog</h1>
+      <label class="setup-label" for="access-key-input">Family access key</label>
+      <textarea
+        id="access-key-input"
+        class="access-key-input"
+        rows="3"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="none"
+        spellcheck="false"
+        placeholder="Paste access key"
+      ></textarea>
+      <label class="remember-row">
+        <input id="remember-key-input" type="checkbox" checked />
+        <span>Remember on this device</span>
+      </label>
+      <div class="form-actions">
+        <button id="generate-key-btn" class="btn btn-secondary">Create</button>
+        <button id="unlock-key-btn" class="btn btn-primary">Unlock</button>
+      </div>
+      <button id="copy-generated-key-btn" class="settings-add-btn hidden">Copy access key</button>
+      <div id="setup-status" class="setup-status"></div>
+    </div>
+  </section>
+
+  <main id="app-shell" class="hidden">
+
+    <section id="tab-log" class="tab-panel active">
+      <div id="log-list"></div>
+    </section>
+
+    <section id="tab-dashboard" class="tab-panel">
+      <div class="dash-date-nav">
+        <button id="dash-prev" class="dash-nav-btn" aria-label="Previous day">&#x2039;</button>
+        <span id="dash-date-label" class="dash-date-label"></span>
+        <button id="dash-next" class="dash-nav-btn" aria-label="Next day">&#x203a;</button>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <span class="dash-card-title">Milk</span>
+        </div>
+        <div id="dash-milk-chart" class="dash-milk-chart"></div>
+      </div>
+    </section>
+
+    <section id="tab-add" class="tab-panel">
+
+      <div class="form-group">
+        <h2>Who are you?</h2>
+        <div id="user-buttons" class="btn-group"></div>
+      </div>
+
+      <div class="form-group">
+        <h2>Which baby?</h2>
+        <div id="baby-buttons" class="btn-group"></div>
+      </div>
+
+      <div class="form-group">
+        <h2>What?</h2>
+        <div id="type-buttons" class="btn-group"></div>
+      </div>
+
+      <div class="form-group hidden" id="step-medication">
+        <h2>Which medication?</h2>
+        <div class="med-alert">
+          Always read the bottle before administering medication.
+        </div>
+        <select id="medication-select" class="med-select">
+          <option value="">Select medication</option>
+        </select>
+        <div id="med-partial-warning" class="med-alert med-alert--warning hidden"></div>
+        <div id="medication-intervals"></div>
+      </div>
+
+      <div class="form-group hidden" id="amount-group">
+        <h2>How much? (<span id="unit-label">ml</span>)</h2>
+        <input
+          id="amount-input"
+          class="amount-input"
+          type="text"
+          inputmode="decimal"
+          pattern="[0-9]*\.?[0-9]*"
+          placeholder="0"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="form-group">
+        <button type="button" id="timestamp-toggle" class="timestamp-toggle">Set date &amp; time</button>
+        <input id="timestamp-input" type="datetime-local" class="timestamp-input hidden" />
+      </div>
+
+      <div class="form-actions">
+        <button id="clear-btn" class="btn btn-secondary">Clear</button>
+        <button id="save-btn" class="btn btn-primary" disabled>Save</button>
+      </div>
+
+      <div id="confirmation" class="confirmation hidden"></div>
+
+    </section>
+
+    <section id="tab-settings" class="tab-panel">
+
+      <div id="settings-setup-card" class="setup-guide hidden">
+        <div class="setup-guide-title">Set up this instance</div>
+        <div id="settings-setup-detail" class="setup-guide-detail"></div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Cloud</h2>
+        <div class="sync-card">
+          <div>
+            <div id="sync-title" class="sync-title">Encrypted sync</div>
+            <div id="sync-detail" class="sync-detail">Not synced yet</div>
+          </div>
+          <button id="sync-now-btn" class="med-card-edit-btn" title="Sync now">↻</button>
+        </div>
+        <div class="settings-row-actions">
+          <button id="copy-access-key-btn" class="log-action-btn">Copy key</button>
+          <button id="forget-key-btn" class="log-action-btn log-action-delete">Forget</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Parents</h2>
+        <div id="settings-users"></div>
+        <button class="settings-add-btn" data-add-list="users">+ Add parent</button>
+      </div>
+
+      <div class="settings-section">
+        <h2>Babies</h2>
+        <div id="settings-babies"></div>
+        <button class="settings-add-btn" data-add-list="babies">+ Add baby</button>
+      </div>
+
+      <div id="person-form" class="med-form hidden">
+        <h3 id="person-form-title" class="med-form-title">New item</h3>
+        <div class="med-form-fields">
+          <label class="med-form-label">Name
+            <input id="person-form-name" class="med-form-input" type="text" placeholder="Name" autocomplete="off" />
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:12px;">
+          <button id="person-form-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="person-form-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Medications</h2>
+        <div id="settings-medications"></div>
+        <button class="settings-add-btn" id="add-med-btn">+ Add medication</button>
+      </div>
+
+      <div id="med-form" class="med-form hidden">
+        <h3 id="med-form-title" class="med-form-title">New medication</h3>
+        <div class="med-form-fields">
+          <label class="med-form-label">Name
+            <input id="med-form-label" class="med-form-input" type="text" placeholder="e.g. Vitamin D" autocomplete="off" />
+          </label>
+          <label class="med-form-label">Unit
+            <input id="med-form-unit" class="med-form-input" type="text" placeholder="ml" autocomplete="off" />
+          </label>
+          <label class="med-form-label">Fixed dose
+            <input id="med-form-amount" class="med-form-input" type="number" placeholder="leave blank for any" min="0" step="any" />
+          </label>
+          <label class="med-form-label">Repeat every (hours)
+            <input id="med-form-interval" class="med-form-input" type="number" placeholder="leave blank if no interval" min="0" step="any" />
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:12px;">
+          <button id="med-form-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="med-form-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+
+      <div id="settings-confirmation" class="confirmation hidden">Saved</div>
+
+    </section>
+
+  </main>
+
+  <nav id="tab-bar" class="tab-bar hidden">
+    <button class="tab-btn active" data-tab="log">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">Log</span>
+    </button>
+    <button class="tab-btn" data-tab="dashboard">
+      <span class="tab-icon">📊</span>
+      <span class="tab-label">Dashboard</span>
+    </button>
+    <button class="tab-btn" data-tab="add">
+      <span class="tab-icon">＋</span>
+      <span class="tab-label">Add</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">Settings</span>
+    </button>
+  </nav>
+
+  <script src="/app.js"></script>
+</body>
+</html>

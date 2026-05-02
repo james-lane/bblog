@@ -1,0 +1,17 @@
+{
+  "name": "bblog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first, end-to-end encrypted bblog mobile web app.",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "check": "node --check public/app.js && node --check public/sw.js && node --check api/vault.js && node --check scripts/dev-server.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.3"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
