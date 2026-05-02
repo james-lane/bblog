@@ -5,6 +5,9 @@ const SESSION_KEY = 'vault-session';
 const KDF_ITERATIONS = 210000;
 const MILK_UNIT = 'ml';
 const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
+const SYNC_MAX_ATTEMPTS = 8;
+const SYNC_CONFLICT_DELAY_MS = 350;
+const SYNC_RETRY_DELAY_MS = 3000;
 
 const formState = {
   user: null,
@@ -53,6 +56,10 @@ function requireVaultCrypto() {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uid(prefix = '') {
@@ -520,11 +527,11 @@ async function putRemoteVault(vault, baseEtag) {
   return body;
 }
 
-function scheduleSync() {
+function scheduleSync(delayMs = 500) {
   if (!session?.accessKey || !session?.familyId) return;
   if (_cloudSyncDisabled) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => syncNow({ quiet: true }).catch(() => {}), 500);
+  syncTimer = setTimeout(() => syncNow({ quiet: true }).catch(() => {}), delayMs);
 }
 
 async function syncNow({ quiet = false, force = false } = {}) {
@@ -539,7 +546,7 @@ async function syncNow({ quiet = false, force = false } = {}) {
   syncInFlight = (async () => {
     if (!quiet) setSyncStatus('Encrypted sync', 'Syncing...');
     if (force) setCloudSyncDisabled(false);
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < SYNC_MAX_ATTEMPTS; attempt++) {
       const localBefore = normalizeData(data || (await loadData()));
       const remote = await fetchRemoteVault();
       if (remote.syncDisabled) {
@@ -575,7 +582,12 @@ async function syncNow({ quiet = false, force = false } = {}) {
       const envelope = await encryptVault(merged);
       await persistSession();
       const put = await putRemoteVault(envelope, baseEtag);
-      if (put.conflict) continue;
+      if (put.conflict) {
+        setOffline(false);
+        setSyncStatus('Encrypted sync', 'Cloud changed - merging...');
+        await wait(SYNC_CONFLICT_DELAY_MS * (attempt + 1));
+        continue;
+      }
       if (put.syncDisabled) {
         setCloudSyncDisabled(true);
         setOffline(false);
@@ -592,7 +604,9 @@ async function syncNow({ quiet = false, force = false } = {}) {
       return;
     }
 
-    throw new Error('Cloud vault changed during sync. Try again.');
+    setOffline(false);
+    setSyncStatus('Encrypted sync', 'Cloud changed - retrying soon...');
+    scheduleSync(SYNC_RETRY_DELAY_MS);
   })()
     .catch((error) => {
       setOffline(true);

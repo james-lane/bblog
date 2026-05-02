@@ -88,6 +88,9 @@ async function handleVault(req, res, url) {
         sendJson(res, 409, { error: 'vault_conflict' });
         return;
       }
+    } else if (!baseEtag && existsSync(path)) {
+      sendJson(res, 409, { error: 'vault_conflict' });
+      return;
     }
     const text = JSON.stringify(vault);
     await writeFile(path, text, 'utf8');

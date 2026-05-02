@@ -54,7 +54,12 @@ function isPreconditionFailed(error) {
   return (
     error?.name === 'BlobPreconditionFailedError' ||
     error?.status === 412 ||
+    error?.status === 409 ||
     error?.statusCode === 412 ||
+    error?.statusCode === 409 ||
+    /already exists/i.test(error?.message ?? '') ||
+    /conflict/i.test(error?.message ?? '') ||
+    /overwrite/i.test(error?.message ?? '') ||
     /precondition/i.test(error?.message ?? '')
   );
 }
@@ -138,7 +143,7 @@ export default async function handler(req, res) {
 
       const blob = await put(vaultPath(familyId), JSON.stringify(vault), {
         access: 'private',
-        allowOverwrite: true,
+        allowOverwrite: Boolean(baseEtag),
         cacheControlMaxAge: 60,
         contentType: 'application/json; charset=utf-8',
         ...(baseEtag ? { ifMatch: baseEtag } : {}),
