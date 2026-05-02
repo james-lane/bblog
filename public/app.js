@@ -30,12 +30,33 @@ let keyCache = null;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+function appCrypto() {
+  return globalThis.crypto;
+}
+
+function requireRandomCrypto() {
+  const cryptoApi = appCrypto();
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error('This browser does not support secure random values.');
+  }
+  return cryptoApi;
+}
+
+function requireVaultCrypto() {
+  const cryptoApi = requireRandomCrypto();
+  const subtle = cryptoApi.subtle || cryptoApi.webkitSubtle;
+  if (!globalThis.isSecureContext || !subtle) {
+    throw new Error('bblog needs a secure HTTPS browser context to create or unlock an encrypted vault.');
+  }
+  return { cryptoApi, subtle };
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
 
 function uid(prefix = '') {
-  return prefix + Date.now().toString(36) + crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+  return prefix + Date.now().toString(36) + requireRandomCrypto().getRandomValues(new Uint32Array(1))[0].toString(36);
 }
 
 function openDb() {
@@ -101,13 +122,13 @@ function bytesToHex(bytes) {
 
 function randomBase64(byteCount) {
   const bytes = new Uint8Array(byteCount);
-  crypto.getRandomValues(bytes);
+  requireRandomCrypto().getRandomValues(bytes);
   return bytesToBase64(bytes);
 }
 
 function generateAccessKey() {
   const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
+  requireRandomCrypto().getRandomValues(bytes);
   const hex = bytesToHex(bytes);
   return `bb-${hex.match(/.{1,4}/g).join('-')}`;
 }
@@ -117,7 +138,8 @@ function normalizeAccessKey(accessKey) {
 }
 
 async function sha256Hex(value) {
-  const digest = await crypto.subtle.digest('SHA-256', enc.encode(value));
+  const { subtle } = requireVaultCrypto();
+  const digest = await subtle.digest('SHA-256', enc.encode(value));
   return bytesToHex(new Uint8Array(digest));
 }
 
@@ -130,14 +152,15 @@ async function deriveCryptoKey(accessKey, salt) {
   if (keyCache?.normalized === normalized && keyCache?.salt === salt) {
     return keyCache.key;
   }
-  const material = await crypto.subtle.importKey(
+  const { subtle } = requireVaultCrypto();
+  const material = await subtle.importKey(
     'raw',
     enc.encode(normalized),
     'PBKDF2',
     false,
     ['deriveKey'],
   );
-  const key = await crypto.subtle.deriveKey(
+  const key = await subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt: base64ToBytes(salt),
@@ -158,9 +181,10 @@ async function encryptVault(plainData) {
   session.salt = salt;
   const key = await deriveCryptoKey(session.accessKey, salt);
   const iv = new Uint8Array(12);
-  crypto.getRandomValues(iv);
+  requireRandomCrypto().getRandomValues(iv);
   const plaintext = enc.encode(JSON.stringify(normalizeData(plainData)));
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const { subtle } = requireVaultCrypto();
+  const ciphertext = await subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
   return {
     version: 1,
     familyId: session.familyId,
@@ -187,7 +211,8 @@ async function decryptVault(envelope) {
   }
   session.salt = envelope.kdf.salt;
   const key = await deriveCryptoKey(session.accessKey, envelope.kdf.salt);
-  const plaintext = await crypto.subtle.decrypt(
+  const { subtle } = requireVaultCrypto();
+  const plaintext = await subtle.decrypt(
     { name: 'AES-GCM', iv: base64ToBytes(envelope.cipher.iv) },
     key,
     base64ToBytes(envelope.cipher.data),
@@ -569,6 +594,13 @@ async function unlockWithAccessKey(rawKey) {
   }
 
   setSetupStatus('Unlocking...');
+  try {
+    requireVaultCrypto();
+  } catch (error) {
+    setSetupStatus(error.message || 'This browser cannot unlock encrypted vaults.', true);
+    return;
+  }
+
   const familyId = await familyIdFor(accessKey);
   const rememberKey = document.getElementById('remember-key-input').checked;
   const stored = await kvGet(SESSION_KEY);
@@ -1408,11 +1440,41 @@ function setActiveTab(tabName) {
 }
 
 async function copyText(text) {
+  const value = String(text || '');
+  if (!value) return false;
+
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return true;
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      /* fall through to the selection fallback */
+    }
   }
-  return false;
+
+  const activeEl = document.activeElement;
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.top = '0';
+  textarea.style.left = '-9999px';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand?.('copy') === true;
+  } catch {
+    copied = false;
+  }
+
+  textarea.remove();
+  if (activeEl?.focus) activeEl.focus();
+  return copied;
 }
 
 function wireSetup() {

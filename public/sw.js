@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bblog-v3';
+const CACHE_NAME = 'bblog-v5';
 const APP_SHELL = [
   '/',
   '/index.html',
