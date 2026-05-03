@@ -1,6 +1,8 @@
 # bblog
 
-An offline-first mobile web version of bblog. It keeps the original tabbed iOS-style UI, stores the working copy in IndexedDB, caches the app shell with a service worker, and syncs one encrypted family vault through a tiny serverless API.
+bblog is a private baby log for families. Parents and carers can record feeds, nappies, medication, weights, and notes from their phones, then view the shared history and simple trends in one place. Each family deploys its own bblog instance and controls one encrypted family vault with a shared access key.
+
+[![Deploy with Vercel](https://vercel.com/button)][deploy-vercel]
 
 ## What is encrypted
 
@@ -21,6 +23,8 @@ npm run dev
 Open `http://localhost:4173`. Local development stores encrypted cloud vault files in `.local/vaults`, so you can test sync without a Vercel account.
 
 ## Deploy on Vercel
+
+Use the deploy button above, or set it up manually:
 
 1. Choose a long family access key. Use at least 18 letters or numbers after spaces and punctuation are removed.
 2. Push this folder to GitHub, either as the repo root or as a subdirectory project.
@@ -67,3 +71,5 @@ It returns `409` when another device has written a newer vault. The client handl
 The UI writes to an encrypted IndexedDB vault immediately. When the network is unavailable, the user can keep adding and editing entries. On reconnect, the client downloads the encrypted cloud vault, decrypts it locally, merges record-level changes, re-encrypts the merged vault, and uploads it.
 
 If "Remember on this device" is enabled, the access key is stored in the browser profile so the app can reopen offline. Use the device passcode and browser profile protections for local device security.
+
+[deploy-vercel]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog&project-name=bblog&repository-name=bblog&env=BBLOG_FAMILY_ACCESS_KEY&envDescription=Required%3A+choose+a+long+family+access+key+for+this+one-vault+bblog+instance.+Add+Vercel+Blob+after+deploy+only+if+you+want+family+sharing+across+devices.&envLink=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog%23deploy-on-vercel
