@@ -1467,22 +1467,23 @@ function renderDashboard() {
     totals[e.baby] = (totals[e.baby] || 0) + milkAmount(e);
   }
 
+  const live = document.getElementById('dash-live-stats');
   const chart = document.getElementById('dash-milk-chart');
   const activeBabies = babies();
   if (!activeBabies.length) {
+    live.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     chart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
 
-  chart.innerHTML = activeBabies
+  live.innerHTML = activeBabies
     .map((baby) => {
-      const total = Math.round(totals[baby.id] || 0);
       const stats = liveStats[baby.id];
       const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
       const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
       const avgText = avg != null ? `${avg} ml` : '—';
       return `
-      <div class="dash-metric" style="--baby-colour:${baby.colour}">
+      <div class="dash-metric dash-live-metric" style="--baby-colour:${baby.colour}">
         <div class="dash-metric-name">${escapeHtml(baby.name)}</div>
         <div class="dash-metric-insights">
           <div class="dash-metric-insight">
@@ -1494,8 +1495,17 @@ function renderDashboard() {
             <span class="dash-metric-text">${escapeHtml(avgText)}</span>
           </div>
         </div>
-        <div class="dash-metric-total">
-          <span class="dash-metric-label">Milk total</span>
+      </div>`;
+    })
+    .join('');
+
+  chart.innerHTML = activeBabies
+    .map((baby) => {
+      const total = Math.round(totals[baby.id] || 0);
+      return `
+      <div class="dash-metric dash-total-metric" style="--baby-colour:${baby.colour}">
+        <div class="dash-metric-name">${escapeHtml(baby.name)}</div>
+        <div class="dash-total-amount">
           <span class="dash-metric-value">${total > 0 ? total : '—'}</span>
           <span class="dash-metric-unit">${total > 0 ? 'ml' : ''}</span>
         </div>

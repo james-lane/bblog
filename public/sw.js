@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bblog-v10';
+const CACHE_NAME = 'bblog-v11';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260503-milkstats',
-  '/app.js?v=20260503-milkstats',
+  '/styles.css?v=20260503-dashboard-split',
+  '/app.js?v=20260503-dashboard-split',
   '/manifest.webmanifest',
   '/icon.svg',
 ];

@@ -12,7 +12,7 @@
   <title>bblog</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260503-milkstats" />
+  <link rel="stylesheet" href="/styles.css?v=20260503-dashboard-split" />
 </head>
 <body>
 
@@ -54,14 +54,20 @@
     </section>
 
     <section id="tab-dashboard" class="tab-panel">
-      <div class="dash-date-nav">
-        <button id="dash-prev" class="dash-nav-btn" aria-label="Previous day">&#x2039;</button>
-        <span id="dash-date-label" class="dash-date-label"></span>
-        <button id="dash-next" class="dash-nav-btn" aria-label="Next day">&#x203a;</button>
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <span class="dash-card-title">Live milk</span>
+        </div>
+        <div id="dash-live-stats" class="dash-live-stats"></div>
       </div>
       <div class="dash-card">
         <div class="dash-card-header">
-          <span class="dash-card-title">Milk</span>
+          <span class="dash-card-title">Milk totals</span>
+        </div>
+        <div class="dash-date-nav">
+          <button id="dash-prev" class="dash-nav-btn" aria-label="Previous day">&#x2039;</button>
+          <span id="dash-date-label" class="dash-date-label"></span>
+          <button id="dash-next" class="dash-nav-btn" aria-label="Next day">&#x203a;</button>
         </div>
         <div id="dash-milk-chart" class="dash-milk-chart"></div>
       </div>
@@ -225,6 +231,6 @@
     </button>
   </nav>
 
-  <script src="/app.js?v=20260503-milkstats"></script>
+  <script src="/app.js?v=20260503-dashboard-split"></script>
 </body>
 </html>

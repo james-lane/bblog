@@ -717,10 +717,9 @@ main::before {
 .dash-date-nav {
   display: flex;
   align-items: center;
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
   overflow: hidden;
 }
 
@@ -755,6 +754,10 @@ main::before {
   box-shadow: var(--shadow);
 }
 
+.dash-card + .dash-card {
+  margin-top: 14px;
+}
+
 .dash-card-header {
   display: flex;
   align-items: baseline;
@@ -771,6 +774,7 @@ main::before {
   color: var(--text-muted);
 }
 
+.dash-live-stats,
 .dash-milk-chart {
   display: flex;
   flex-direction: column;
@@ -792,6 +796,23 @@ main::before {
   font-size: 1rem;
   font-weight: 700;
   color: var(--baby-colour, var(--accent));
+}
+
+.dash-total-metric {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-total-metric .dash-metric-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-total-amount {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .dash-metric-insights {
@@ -824,20 +845,6 @@ main::before {
   line-height: 1.2;
   color: var(--text);
   overflow-wrap: anywhere;
-}
-
-.dash-metric-total {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.dash-metric-total .dash-metric-label {
-  margin-right: auto;
-  align-self: center;
 }
 
 .dash-metric-value {
