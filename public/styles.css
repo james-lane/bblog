@@ -229,6 +229,16 @@ main::before {
   gap: 10px;
 }
 
+#type-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#type-buttons .sel-btn {
+  min-width: 0;
+  width: 100%;
+}
+
 .sel-btn {
   flex: 1;
   min-width: 100px;
@@ -251,6 +261,12 @@ main::before {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+@media (max-width: 430px) {
+  #type-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .amount-input {
@@ -277,6 +293,53 @@ main::before {
 
 .amount-input::placeholder { color: var(--border); }
 .amount-input--locked { color: var(--text-muted); border-color: var(--border); opacity: 0.6; }
+
+.weight-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.weight-lb-oz {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weight-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.weight-input {
+  width: 100%;
+  height: 56px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 16px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: right;
+  box-shadow: var(--shadow);
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+
+.weight-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.18);
+}
+
+.weight-input::placeholder { color: var(--border); }
 
 .form-actions {
   display: flex;
@@ -822,6 +885,13 @@ main::before {
   flex: 1;
 }
 
+.dash-live-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
 .dash-live-name {
   color: #fff;
   font-size: 1rem;
@@ -829,8 +899,18 @@ main::before {
   line-height: 1.15;
 }
 
+.dash-live-weight {
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: left;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
 .dash-live-window {
-  margin-top: 6px;
+  margin-top: 12px;
   color: #fff;
   font-size: 0.68rem;
   font-weight: 700;
@@ -857,7 +937,8 @@ main::before {
 }
 
 .dash-live-stat-label,
-.dash-live-last-label {
+.dash-live-last-label,
+.dash-live-gap-label {
   display: block;
   color: #fff;
   font-size: 0.62rem;
@@ -892,6 +973,29 @@ main::before {
   font-weight: 900;
   line-height: 1.05;
   overflow-wrap: anywhere;
+}
+
+.dash-live-last-ago {
+  display: block;
+  margin-top: 3px;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.2;
+  opacity: 0.78;
+}
+
+.dash-live-gap-label {
+  margin-top: 12px;
+}
+
+.dash-live-gap-value {
+  display: block;
+  margin-top: 3px;
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.1;
 }
 
 .dash-total-metric {

@@ -5,6 +5,9 @@ const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
 const MILK_UNIT = 'ml';
+const WEIGHT_UNIT = 'g';
+const GRAMS_PER_OUNCE = 28.349523125;
+const OUNCES_PER_POUND = 16;
 const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
 const SYNC_RETRY_DELAY_MS = 3000;
 
@@ -293,11 +296,15 @@ function buildDemoData() {
       { id: 'demo_ava_feed_2', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 120, unit: 'ml', timestamp: hoursAgo(5.5) },
       { id: 'demo_ava_feed_3', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 75, unit: 'ml', timestamp: hoursAgo(12) },
       { id: 'demo_ava_feed_4', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 105, unit: 'ml', timestamp: hoursAgo(27) },
+      { id: 'demo_ava_weight_1', type: 'weight', baby: 'demo_ava', user: 'demo_parent', amount: 3650, unit: 'g', timestamp: hoursAgo(6) },
+      { id: 'demo_ava_weight_2', type: 'weight', baby: 'demo_ava', user: 'demo_parent', amount: 3490, unit: 'g', timestamp: hoursAgo(72) },
       { id: 'demo_ava_poo_1', type: 'poo', baby: 'demo_ava', user: 'demo_parent', timestamp: hoursAgo(3.25) },
       { id: 'demo_luca_feed_1', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 110, unit: 'ml', timestamp: hoursAgo(2.1) },
       { id: 'demo_luca_feed_2', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 140, unit: 'ml', timestamp: hoursAgo(9) },
       { id: 'demo_luca_feed_3', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 95, unit: 'ml', timestamp: hoursAgo(18) },
       { id: 'demo_luca_feed_4', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 130, unit: 'ml', timestamp: hoursAgo(30) },
+      { id: 'demo_luca_weight_1', type: 'weight', baby: 'demo_luca', user: 'demo_parent', amount: 4210, unit: 'g', timestamp: hoursAgo(14) },
+      { id: 'demo_luca_weight_2', type: 'weight', baby: 'demo_luca', user: 'demo_parent', amount: 4060, unit: 'g', timestamp: hoursAgo(96) },
       { id: 'demo_luca_poo_1', type: 'poo', baby: 'demo_luca', user: 'demo_parent', timestamp: hoursAgo(7) },
     ],
   });
@@ -419,6 +426,7 @@ function findMed(id) {
 }
 
 function currentUnit() {
+  if (formState.type === 'weight') return WEIGHT_UNIT;
   if (formState.type === 'medication' && formState.medication) {
     return findMed(formState.medication)?.unit || 'ml';
   }
@@ -809,9 +817,74 @@ function formatElapsed(ms) {
   return remHours > 0 ? `${days}d ${remHours}h ago` : `${days}d ago`;
 }
 
+function formatDuration(ms) {
+  const totalMins = Math.round(ms / 60000);
+  if (totalMins < 1) return '<1m';
+  if (totalMins < 60) return `${totalMins}m`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 function milkAmount(entry) {
   const amount = parseFloat(entry.amount);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function weightGrams(entry) {
+  const amount = parseFloat(entry.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (entry.unit === 'lb') return amount * OUNCES_PER_POUND * GRAMS_PER_OUNCE;
+  if (entry.unit === 'oz') return amount * GRAMS_PER_OUNCE;
+  return amount;
+}
+
+function gramsToLbOz(grams) {
+  const totalOunces = Math.max(0, grams / GRAMS_PER_OUNCE);
+  let pounds = Math.floor(totalOunces / OUNCES_PER_POUND);
+  let ounces = Math.round((totalOunces - pounds * OUNCES_PER_POUND) * 10) / 10;
+  if (ounces >= OUNCES_PER_POUND) {
+    pounds += 1;
+    ounces = 0;
+  }
+  return { pounds, ounces };
+}
+
+function formatOunces(ounces) {
+  return Number.isInteger(ounces) ? String(ounces) : ounces.toFixed(1);
+}
+
+function formatWeightLbOz(grams) {
+  if (!Number.isFinite(grams) || grams <= 0) return '—';
+  const { pounds, ounces } = gramsToLbOz(grams);
+  if (!pounds) return `${formatOunces(ounces)} oz`;
+  return `${pounds} lb ${formatOunces(ounces)} oz`;
+}
+
+function formatWeightDate(isoString) {
+  const d = new Date(isoString);
+  if (!Number.isFinite(d.getTime())) return '';
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfWeight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = Math.round((startOfWeight - startOfToday) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
+function latestWeightsByBaby() {
+  const latest = {};
+  for (const e of entries()) {
+    if (e.type !== 'weight' || !e.baby) continue;
+    const grams = weightGrams(e);
+    const t = new Date(e.timestamp).getTime();
+    if (!grams || !Number.isFinite(t)) continue;
+    if (!latest[e.baby] || t > latest[e.baby].timestampMs) {
+      latest[e.baby] = { grams, timestamp: e.timestamp, timestampMs: t };
+    }
+  }
+  return latest;
 }
 
 function milkLiveStats(now = Date.now()) {
@@ -824,7 +897,7 @@ function milkLiveStats(now = Date.now()) {
     if (!Number.isFinite(t) || t > now) continue;
 
     if (!stats[e.baby]) {
-      stats[e.baby] = { lastAt: null, rollingAmount: 0, rollingFeeds: 0 };
+      stats[e.baby] = { lastAt: null, rollingAmount: 0, rollingFeeds: 0, rollingTimes: [] };
     }
 
     if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
@@ -833,6 +906,7 @@ function milkLiveStats(now = Date.now()) {
 
     if (t >= windowStart) {
       const amount = milkAmount(e);
+      stats[e.baby].rollingTimes.push(t);
       if (amount > 0) {
         stats[e.baby].rollingAmount += amount;
         stats[e.baby].rollingFeeds += 1;
@@ -841,6 +915,16 @@ function milkLiveStats(now = Date.now()) {
       }
     }
   }
+
+  Object.values(stats).forEach((stat) => {
+    const times = stat.rollingTimes.sort((a, b) => a - b);
+    if (times.length < 2) return;
+    let totalGap = 0;
+    for (let i = 1; i < times.length; i++) {
+      totalGap += times[i] - times[i - 1];
+    }
+    stat.avgGapMs = totalGap / (times.length - 1);
+  });
 
   return stats;
 }
@@ -890,34 +974,105 @@ function renderBabyButtons() {
   }, 'Add a baby in Settings.');
 }
 
+function cleanDecimalInput(input) {
+  let val = input.value.replace(/[^0-9.]/g, '');
+  const parts = val.split('.');
+  if (parts.length > 2) val = `${parts[0]}.${parts.slice(1).join('')}`;
+  input.value = val;
+  return val;
+}
+
+function cleanIntegerInput(input) {
+  const val = input.value.replace(/[^0-9]/g, '');
+  input.value = val;
+  return val;
+}
+
+function resetWeightInputs() {
+  ['weight-grams-input', 'weight-pounds-input', 'weight-ounces-input'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  });
+}
+
+function setWeightLbOzFields(grams) {
+  const poundsInput = document.getElementById('weight-pounds-input');
+  const ouncesInput = document.getElementById('weight-ounces-input');
+  if (!grams || grams <= 0) {
+    poundsInput.value = '';
+    ouncesInput.value = '';
+    return;
+  }
+  const { pounds, ounces } = gramsToLbOz(grams);
+  poundsInput.value = pounds ? String(pounds) : '';
+  ouncesInput.value = ounces ? formatOunces(ounces) : '';
+}
+
+function updateWeightFromGramsInput() {
+  const gramsInput = document.getElementById('weight-grams-input');
+  const raw = cleanIntegerInput(gramsInput);
+  const grams = parseInt(raw, 10);
+  formState.amount = grams > 0 ? String(grams) : '';
+  setWeightLbOzFields(grams);
+  updateSaveBtn();
+}
+
+function updateWeightFromLbOzInputs() {
+  const poundsInput = document.getElementById('weight-pounds-input');
+  const ouncesInput = document.getElementById('weight-ounces-input');
+  const poundsRaw = cleanIntegerInput(poundsInput);
+  const ouncesRaw = cleanDecimalInput(ouncesInput);
+  const pounds = parseInt(poundsRaw || '0', 10);
+  const ounces = parseFloat(ouncesRaw || '0');
+  const grams = Math.round((pounds * OUNCES_PER_POUND + ounces) * GRAMS_PER_OUNCE);
+  document.getElementById('weight-grams-input').value = grams > 0 ? String(grams) : '';
+  formState.amount = grams > 0 ? String(grams) : '';
+  updateSaveBtn();
+}
+
 function renderTypeButtons() {
   const types = [
     { id: 'milk', name: '🍼 Milk' },
     { id: 'medication', name: '💊 Meds' },
-    { id: 'poo', name: '💩' },
+    { id: 'poo', name: '💩 Poop' },
+    { id: 'weight', name: '⚖️ Weight' },
   ];
 
   renderSelButtons('type-buttons', types, 'type', (selectedId) => {
     formState.medication = null;
+    formState.amount = '';
     const amountInput = document.getElementById('amount-input');
+    amountInput.value = '';
     amountInput.readOnly = false;
     amountInput.classList.remove('amount-input--locked');
 
     const medStep = document.getElementById('step-medication');
     const amountGroup = document.getElementById('amount-group');
+    const weightGroup = document.getElementById('weight-group');
 
     if (selectedId === 'medication') {
       medStep.classList.remove('hidden');
       amountGroup.classList.remove('hidden');
+      weightGroup.classList.add('hidden');
+      resetWeightInputs();
       renderMedButtons();
       renderMedIntervals(formState.baby);
     } else if (selectedId === 'poo') {
       medStep.classList.add('hidden');
       amountGroup.classList.add('hidden');
+      weightGroup.classList.add('hidden');
+      resetWeightInputs();
+      document.getElementById('medication-intervals').innerHTML = '';
+    } else if (selectedId === 'weight') {
+      medStep.classList.add('hidden');
+      amountGroup.classList.add('hidden');
+      weightGroup.classList.remove('hidden');
       document.getElementById('medication-intervals').innerHTML = '';
     } else {
       medStep.classList.add('hidden');
       amountGroup.classList.remove('hidden');
+      weightGroup.classList.add('hidden');
+      resetWeightInputs();
       document.getElementById('medication-intervals').innerHTML = '';
     }
 
@@ -926,6 +1081,7 @@ function renderTypeButtons() {
   });
 
   if (!formState.type) document.getElementById('amount-group').classList.add('hidden');
+  if (!formState.type) document.getElementById('weight-group').classList.add('hidden');
   if (!medications().length) {
     const medBtn = document.querySelector('#type-buttons .sel-btn[data-id="medication"]');
     if (medBtn) medBtn.disabled = true;
@@ -1040,6 +1196,7 @@ function updateUnitLabel() {
 function updateSaveBtn() {
   const medOk =
     formState.type === 'milk' ||
+    formState.type === 'weight' ||
     formState.type === 'poo' ||
     (formState.type === 'medication' && formState.medication);
   const amountOk = formState.type === 'poo' || parseFloat(formState.amount) > 0;
@@ -1077,8 +1234,15 @@ async function saveEntry() {
       ? 'Poo'
       : formState.type === 'medication'
         ? findMed(formState.medication)?.label || formState.medication
-        : 'Milk';
-  const amountStr = formState.type !== 'poo' ? ` ${entry.amount} ${entry.unit}` : '';
+        : formState.type === 'weight'
+          ? 'Weight'
+          : 'Milk';
+  const amountStr =
+    formState.type === 'weight'
+      ? ` ${formatWeightLbOz(weightGrams(entry))}`
+      : formState.type !== 'poo'
+        ? ` ${entry.amount} ${entry.unit}`
+        : '';
   const conf = document.getElementById('confirmation');
   conf.textContent = `Saved - ${baby?.name || formState.baby}: ${detail}${amountStr}`;
   conf.classList.remove('hidden');
@@ -1090,7 +1254,9 @@ async function saveEntry() {
   renderTypeButtons();
   document.getElementById('step-medication').classList.add('hidden');
   document.getElementById('amount-group').classList.add('hidden');
+  document.getElementById('weight-group').classList.add('hidden');
   document.getElementById('amount-input').value = '';
+  resetWeightInputs();
   document.getElementById('timestamp-input').value = '';
   document.getElementById('timestamp-input').classList.add('hidden');
   document.getElementById('timestamp-toggle').classList.remove('active');
@@ -1110,10 +1276,12 @@ function clearForm() {
   renderTypeButtons();
   document.getElementById('step-medication').classList.add('hidden');
   document.getElementById('amount-group').classList.add('hidden');
+  document.getElementById('weight-group').classList.add('hidden');
   const amountInput = document.getElementById('amount-input');
   amountInput.value = '';
   amountInput.readOnly = false;
   amountInput.classList.remove('amount-input--locked');
+  resetWeightInputs();
   document.getElementById('timestamp-input').value = '';
   document.getElementById('timestamp-input').classList.add('hidden');
   document.getElementById('timestamp-toggle').classList.remove('active');
@@ -1136,12 +1304,21 @@ function renderLog() {
       const baby = findBaby(e.baby);
       const user = findUser(e.user);
       const med = e.medication ? findMed(e.medication) : null;
-      const emoji = e.type === 'medication' ? '💊' : e.type === 'poo' ? '💩' : '🍼';
-      const typeName = e.type === 'medication' ? escapeHtml(med ? med.label : e.medication) : e.type === 'poo' ? 'Poo' : 'Milk';
+      const emoji = e.type === 'medication' ? '💊' : e.type === 'poo' ? '💩' : e.type === 'weight' ? '⚖️' : '🍼';
+      const typeName =
+        e.type === 'medication'
+          ? escapeHtml(med ? med.label : e.medication)
+          : e.type === 'poo'
+            ? 'Poo'
+            : e.type === 'weight'
+              ? 'Weight'
+              : 'Milk';
       const primary =
         e.type === 'poo'
           ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> had a moment`
-          : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
+          : e.type === 'weight'
+            ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> weighed <span class="log-val">${escapeHtml(formatWeightLbOz(weightGrams(e)))}</span>`
+            : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
       const medOptions = medications()
         .map((m) => `<option value="${m.id}" ${e.medication === m.id ? 'selected' : ''}>${escapeHtml(m.label)}</option>`)
         .join('');
@@ -1165,8 +1342,8 @@ function renderLog() {
         <div class="log-edit-form hidden" data-edit-id="${e.id}">
           ${
             e.type !== 'poo'
-              ? `<label class="log-edit-label">Amount
-                  <input class="log-edit-input" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" data-field="amount" value="${escapeHtml(e.amount)}" autocomplete="off" autocorrect="off" spellcheck="false" />
+              ? `<label class="log-edit-label">${e.type === 'weight' ? 'Weight (g)' : 'Amount'}
+                  <input class="log-edit-input" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" data-field="amount" value="${escapeHtml(e.type === 'weight' ? Math.round(weightGrams(e)) : e.amount)}" autocomplete="off" autocorrect="off" spellcheck="false" />
                 </label>`
               : ''
           }
@@ -1233,6 +1410,7 @@ function renderLog() {
         const entry = next.entries.find((item) => item.id === btn.dataset.id);
         if (!entry) return;
         if (amtInput) entry.amount = parseFloat(amtInput.value);
+        if (amtInput && entry.type === 'weight') entry.unit = WEIGHT_UNIT;
         if (tsInput?.value) entry.timestamp = new Date(tsInput.value).toISOString();
         if (medInput) {
           entry.medication = medInput.value;
@@ -1511,6 +1689,7 @@ function renderDashboard() {
   const end = start + 86400000;
   const totals = {};
   const liveStats = milkLiveStats(now);
+  const latestWeights = latestWeightsByBaby();
   for (const e of entries()) {
     if (e.type !== 'milk') continue;
     const t = new Date(e.timestamp).getTime();
@@ -1530,7 +1709,14 @@ function renderDashboard() {
   live.innerHTML = activeBabies
     .map((baby) => {
       const stats = liveStats[baby.id];
+      const latestWeight = latestWeights[baby.id];
+      const weightText = latestWeight
+        ? `${formatWeightLbOz(latestWeight.grams)} · ${formatWeightDate(latestWeight.timestamp)}`
+        : 'No weight yet';
       const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
+      const lastFeedHasAgo = lastFeed.endsWith(' ago');
+      const lastFeedValue = lastFeedHasAgo ? lastFeed.slice(0, -4) : lastFeed;
+      const avgGapText = stats?.avgGapMs ? formatDuration(stats.avgGapMs) : '—';
       const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
       const minText = stats?.rollingFeeds ? `${Math.round(stats.rollingMin)} ml` : '—';
       const avgText = avg != null ? `${avg} ml` : '—';
@@ -1538,7 +1724,10 @@ function renderDashboard() {
       return `
       <div class="dash-live-metric" style="--baby-colour:${baby.colour}">
         <div class="dash-live-info">
-          <div class="dash-live-name">${escapeHtml(baby.name)}</div>
+          <div class="dash-live-heading">
+            <div class="dash-live-name">${escapeHtml(baby.name)}</div>
+            <div class="dash-live-weight">${escapeHtml(weightText)}</div>
+          </div>
           <div class="dash-live-window">Rolling previous 24h</div>
           <div class="dash-live-rolling">
             <div class="dash-live-stat">
@@ -1558,7 +1747,10 @@ function renderDashboard() {
         </div>
         <div class="dash-live-last">
           <span class="dash-live-last-label">Last feed</span>
-          <span class="dash-live-last-value">${escapeHtml(lastFeed)}</span>
+          <span class="dash-live-last-value">${escapeHtml(lastFeedValue)}</span>
+          ${lastFeedHasAgo ? '<span class="dash-live-last-ago">ago</span>' : ''}
+          <span class="dash-live-gap-label">Avg gap</span>
+          <span class="dash-live-gap-value">${escapeHtml(avgGapText)}</span>
         </div>
       </div>`;
     })
@@ -1671,6 +1863,10 @@ function wireApp() {
     formState.amount = val;
     updateSaveBtn();
   });
+
+  document.getElementById('weight-grams-input').addEventListener('input', updateWeightFromGramsInput);
+  document.getElementById('weight-pounds-input').addEventListener('input', updateWeightFromLbOzInputs);
+  document.getElementById('weight-ounces-input').addEventListener('input', updateWeightFromLbOzInputs);
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
