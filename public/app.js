@@ -10,6 +10,7 @@ const GRAMS_PER_OUNCE = 28.349523125;
 const OUNCES_PER_POUND = 16;
 const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
 const SYNC_RETRY_DELAY_MS = 3000;
+const SYNC_FOREGROUND_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 const formState = {
   user: null,
@@ -605,6 +606,13 @@ function scheduleSync(delayMs = 500) {
   syncTimer = setTimeout(() => syncNow({ quiet: true }).catch(() => {}), delayMs);
 }
 
+function shouldSyncOnForeground() {
+  if (_demoMode || _cloudSyncDisabled || !navigator.onLine) return false;
+  if (!session?.accessKey || !session?.familyId) return false;
+  const lastSyncedAt = session.lastSyncedAt ? new Date(session.lastSyncedAt).getTime() : 0;
+  return !lastSyncedAt || Date.now() - lastSyncedAt > SYNC_FOREGROUND_MIN_INTERVAL_MS;
+}
+
 async function syncNow({ quiet = false, force = false } = {}) {
   if (_demoMode) return;
   if (!session?.accessKey || !session?.familyId) return;
@@ -629,13 +637,26 @@ async function syncNow({ quiet = false, force = false } = {}) {
 
     const remotePlain = remote.exists ? await decryptRemoteVaults(remote) : null;
     const merged = remotePlain ? mergeVaults(localBefore, remotePlain) : localBefore;
-    if (!session.salt) session.salt = randomBase64(16);
+    const localComparable = comparable(localBefore);
+    const mergedComparable = comparable(merged);
+    const remoteComparable = remotePlain ? comparable(remotePlain) : null;
 
-    if (comparable(merged) !== comparable(localBefore)) {
+    if (mergedComparable !== localComparable) {
       await saveData(merged);
       renderAll();
     }
 
+    if (remoteComparable && mergedComparable === remoteComparable) {
+      setCloudSyncDisabled(false);
+      session.remoteEtag = remote.etag || null;
+      session.lastSyncedAt = nowIso();
+      await persistSession();
+      setOffline(false);
+      updateSyncUi();
+      return;
+    }
+
+    if (!session.salt) session.salt = randomBase64(16);
     const envelope = await encryptVault(merged);
     await persistSession();
     const put = await putRemoteVault(envelope, remote.etag || null);
@@ -701,14 +722,19 @@ async function unlockWithAccessKey(rawKey) {
   await persistSession();
 
   try {
+    if (hasLocalVault) {
+      await loadData();
+      showApp();
+      setOffline(false);
+      setSetupStatus('');
+      syncNow({ quiet: true }).catch(() => {});
+      return;
+    }
+
     const remote = await fetchRemoteVault();
     if (remote.syncDisabled) {
       setCloudSyncDisabled(true);
-      if (hasLocalVault) {
-        await loadData();
-      } else {
-        await saveData(buildEmptyData());
-      }
+      await saveData(buildEmptyData());
       showApp();
       setOffline(false);
       setSetupStatus('');
@@ -726,11 +752,7 @@ async function unlockWithAccessKey(rawKey) {
       return;
     }
 
-    if (hasLocalVault) {
-      await loadData();
-    } else {
-      await saveData(buildEmptyData());
-    }
+    await saveData(buildEmptyData());
 
     showApp();
     setOffline(false);
@@ -817,6 +839,13 @@ function formatElapsed(ms) {
   const days = Math.floor(hours / 24);
   const remHours = hours % 24;
   return remHours > 0 ? `${days}d ${remHours}h ago` : `${days}d ago`;
+}
+
+function splitElapsedAgo(text) {
+  const value = String(text || '');
+  return value.endsWith(' ago')
+    ? { value: value.slice(0, -4), hasAgo: true }
+    : { value, hasAgo: false };
 }
 
 function formatDuration(ms) {
@@ -1919,15 +1948,14 @@ function renderDashboard() {
         ? `${formatWeightLbOz(latestWeight.grams)} · ${formatWeightDate(latestWeight.timestamp)}`
         : 'No weight yet';
       const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
-      const lastFeedHasAgo = lastFeed.endsWith(' ago');
-      const lastFeedValue = lastFeedHasAgo ? lastFeed.slice(0, -4) : lastFeed;
+      const lastFeedParts = splitElapsedAgo(lastFeed);
       const avgGapText = stats?.avgGapMs ? formatDuration(stats.avgGapMs) : '—';
       const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
       const minText = stats?.rollingFeeds ? `${Math.round(stats.rollingMin)} ml` : '—';
       const avgText = avg != null ? `${avg} ml` : '—';
       const maxText = stats?.rollingFeeds ? `${Math.round(stats.rollingMax)} ml` : '—';
       return `
-      <div class="dash-live-metric" style="--baby-colour:${baby.colour}">
+      <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}">
         <div class="dash-live-info">
           <div class="dash-live-heading">
             <div class="dash-live-name">${escapeHtml(baby.name)}</div>
@@ -1952,8 +1980,8 @@ function renderDashboard() {
         </div>
         <div class="dash-live-last">
           <span class="dash-live-last-label">Last feed</span>
-          <span class="dash-live-last-value">${escapeHtml(lastFeedValue)}</span>
-          ${lastFeedHasAgo ? '<span class="dash-live-last-ago">ago</span>' : ''}
+          <span class="dash-live-last-value">${escapeHtml(lastFeedParts.value)}</span>
+          <span class="dash-live-last-ago" ${lastFeedParts.hasAgo ? '' : 'hidden'}>ago</span>
           <span class="dash-live-gap-label">Avg gap</span>
           <span class="dash-live-gap-value">${escapeHtml(avgGapText)}</span>
         </div>
@@ -1977,6 +2005,22 @@ function renderDashboard() {
 
   weightChart.innerHTML = renderWeightTrend(activeBabies);
   initWeightTrendChart(activeBabies);
+}
+
+function refreshDashboardLiveTimes() {
+  if (!data || !document.getElementById('tab-dashboard')?.classList.contains('active')) return;
+  const now = Date.now();
+  const liveStats = milkLiveStats(now);
+  document.querySelectorAll('.dash-live-metric[data-live-baby-id]').forEach((metric) => {
+    const babyId = metric.dataset.liveBabyId;
+    const stats = liveStats[babyId];
+    const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
+    const lastFeedParts = splitElapsedAgo(lastFeed);
+    const valueEl = metric.querySelector('.dash-live-last-value');
+    const agoEl = metric.querySelector('.dash-live-last-ago');
+    if (valueEl) valueEl.textContent = lastFeedParts.value;
+    if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
+  });
 }
 
 function renderAll() {
@@ -2152,10 +2196,15 @@ function wireApp() {
     syncNow({ quiet: true }).catch(() => {});
   });
   window.addEventListener('offline', () => setOffline(true));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && shouldSyncOnForeground()) {
+      syncNow({ quiet: true }).catch(() => {});
+    }
+  });
 
   setInterval(() => {
     updateSyncUi();
-    if (navigator.onLine) syncNow({ quiet: true }).catch(() => {});
+    refreshDashboardLiveTimes();
   }, 15000);
 }
 
