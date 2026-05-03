@@ -9,7 +9,8 @@
     "check": "node --check public/app.js && node --check public/sw.js && node --check api/vault.js && node --check scripts/dev-server.mjs"
   },
   "dependencies": {
-    "@vercel/blob": "^2.3.3"
+    "@vercel/blob": "^2.3.3",
+    "chart.js": "^4.5.1"
   },
   "engines": {
     "node": ">=24.0.0"
