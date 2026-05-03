@@ -11,6 +11,9 @@ const vaultDir = join(root, '.local', 'vaults');
 const portFlag = process.argv.findIndex((arg) => arg === '--port');
 const port = portFlag >= 0 ? Number(process.argv[portFlag + 1]) : Number(process.env.PORT || 4173);
 const host = process.env.HOST || '127.0.0.1';
+const minAccessKeyLength = 18;
+const instanceAccessKey = process.env.BBLOG_FAMILY_ACCESS_KEY || process.env.BBLOG_ACCESS_KEY || '';
+const instanceFamilyId = familyIdForAccessKey(instanceAccessKey);
 
 const mime = {
   '.html': 'text/html; charset=utf-8',
@@ -45,6 +48,30 @@ function devicePath(familyId, deviceId) {
 
 function etagFor(text) {
   return `"${createHash('sha256').update(text).digest('hex')}"`;
+}
+
+function normalizeAccessKey(accessKey) {
+  return String(accessKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function familyIdForAccessKey(accessKey) {
+  const normalized = normalizeAccessKey(accessKey);
+  if (normalized.length < minAccessKeyLength) return '';
+  return createHash('sha256').update(`bblog-family-v1:${normalized}`).digest('hex');
+}
+
+function validateInstanceFamily(res, familyId) {
+  if (!instanceFamilyId) return true;
+
+  if (familyId !== instanceFamilyId) {
+    sendJson(res, 403, {
+      error: 'instance_key_mismatch',
+      message: 'That access key does not match this local bblog instance.',
+    });
+    return false;
+  }
+
+  return true;
 }
 
 async function readLocalVault(path, source) {
@@ -84,6 +111,8 @@ async function handleVault(req, res, url) {
     if (url.searchParams.get('status') === '1') {
       sendJson(res, 200, {
         ok: true,
+        instanceKeyConfigured: Boolean(instanceFamilyId),
+        blobConfigured: true,
         syncConfigured: true,
         mode: 'local-dev',
         storage: '.local/vaults',
@@ -97,6 +126,7 @@ async function handleVault(req, res, url) {
       sendJson(res, 200, { exists: false, vaults: [] });
       return;
     }
+    if (!validateInstanceFamily(res, familyId)) return;
 
     const vaults = [
       await readLocalVault(path, 'legacy'),
@@ -124,6 +154,7 @@ async function handleVault(req, res, url) {
       sendJson(res, 400, { error: 'invalid_vault' });
       return;
     }
+    if (!validateInstanceFamily(res, familyId)) return;
     if (deviceId) {
       if (!/^[a-z0-9_-]{8,96}$/.test(deviceId)) {
         sendJson(res, 400, { error: 'invalid_device_id' });

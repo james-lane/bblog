@@ -12,7 +12,7 @@
   <title>bblog</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260503-live-clock" />
+  <link rel="stylesheet" href="/styles.css?v=20260503-instance-key" />
 </head>
 <body>
 
@@ -23,7 +23,7 @@
   <section id="setup-screen" class="setup-screen">
     <div class="setup-panel">
       <h1>bblog</h1>
-      <label class="setup-label" for="access-key-input">Family access key</label>
+      <label class="setup-label" for="access-key-input">Join with access key</label>
       <textarea
         id="access-key-input"
         class="access-key-input"
@@ -39,10 +39,8 @@
         <span>Remember on this device</span>
       </label>
       <div class="form-actions">
-        <button id="generate-key-btn" class="btn btn-secondary">Create</button>
-        <button id="unlock-key-btn" class="btn btn-primary">Unlock</button>
+        <button id="unlock-key-btn" class="btn btn-primary">Join</button>
       </div>
-      <button id="copy-generated-key-btn" class="settings-add-btn hidden">Copy access key</button>
       <div id="setup-status" class="setup-status"></div>
     </div>
   </section>
@@ -280,6 +278,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260503-live-clock"></script>
+  <script src="/app.js?v=20260503-instance-key"></script>
 </body>
 </html>

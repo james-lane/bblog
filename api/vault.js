@@ -1,8 +1,12 @@
+import { createHash } from 'node:crypto';
 import { get, list, put } from '@vercel/blob';
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const FAMILY_RE = /^[a-f0-9]{32,64}$/;
 const VAULT_PREFIX = 'bblog/v1/vaults';
+const MIN_ACCESS_KEY_LENGTH = 18;
+const INSTANCE_ACCESS_KEY = process.env.BBLOG_FAMILY_ACCESS_KEY || process.env.BBLOG_ACCESS_KEY || '';
+const INSTANCE_FAMILY_ID = familyIdForAccessKey(INSTANCE_ACCESS_KEY);
 
 function vaultPath(familyId) {
   return `${VAULT_PREFIX}/${familyId}.json`;
@@ -29,6 +33,36 @@ function validateFamilyId(familyId) {
 
 function validateDeviceId(deviceId) {
   return typeof deviceId === 'string' && /^[a-z0-9_-]{8,96}$/.test(deviceId);
+}
+
+function normalizeAccessKey(accessKey) {
+  return String(accessKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function familyIdForAccessKey(accessKey) {
+  const normalized = normalizeAccessKey(accessKey);
+  if (normalized.length < MIN_ACCESS_KEY_LENGTH) return '';
+  return createHash('sha256').update(`bblog-family-v1:${normalized}`).digest('hex');
+}
+
+function validateInstanceFamily(res, familyId) {
+  if (!INSTANCE_FAMILY_ID) {
+    sendJson(res, 428, {
+      error: 'instance_key_required',
+      message: 'This bblog deployment is not configured. Set BBLOG_FAMILY_ACCESS_KEY before joining.',
+    });
+    return false;
+  }
+
+  if (familyId !== INSTANCE_FAMILY_ID) {
+    sendJson(res, 403, {
+      error: 'instance_key_mismatch',
+      message: 'That access key does not match this deployed bblog instance.',
+    });
+    return false;
+  }
+
+  return true;
 }
 
 async function readRequestJson(req) {
@@ -119,10 +153,14 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const url = new URL(req.url, 'https://bblog.local');
       if (url.searchParams.get('status') === '1') {
+        const instanceKeyConfigured = Boolean(INSTANCE_FAMILY_ID);
+        const blobConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
         sendJson(res, 200, {
           ok: true,
-          syncConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-          mode: process.env.BLOB_READ_WRITE_TOKEN ? 'cloud' : 'local-only',
+          instanceKeyConfigured,
+          blobConfigured,
+          syncConfigured: instanceKeyConfigured && blobConfigured,
+          mode: !instanceKeyConfigured ? 'setup-required' : blobConfigured ? 'cloud' : 'local-only',
           storage: 'vercel-blob',
         });
         return;
@@ -133,12 +171,13 @@ export default async function handler(req, res) {
         sendJson(res, 400, { error: 'invalid_family_id' });
         return;
       }
+      if (!validateInstanceFamily(res, familyId)) return;
 
       if (!process.env.BLOB_READ_WRITE_TOKEN) {
         sendJson(res, 200, {
           exists: false,
           syncDisabled: true,
-          message: 'Cloud sync is not configured. The app is running in local-only mode.',
+          message: 'Cloud storage is not configured. This bblog instance can be used on one device; connect Vercel Blob before sharing.',
         });
         return;
       }
@@ -185,12 +224,13 @@ export default async function handler(req, res) {
         sendJson(res, 400, { error: 'invalid_vault' });
         return;
       }
+      if (!validateInstanceFamily(res, familyId)) return;
 
       if (!process.env.BLOB_READ_WRITE_TOKEN) {
         sendJson(res, 200, {
           ok: false,
           syncDisabled: true,
-          message: 'Cloud sync is not configured. The app is running in local-only mode.',
+          message: 'Cloud storage is not configured. This bblog instance can be used on one device; connect Vercel Blob before sharing.',
         });
         return;
       }

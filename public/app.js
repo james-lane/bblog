@@ -32,7 +32,6 @@ let _demoMode = false;
 let _dashOffset = 0;
 let _medEditId = null;
 let _personEdit = null;
-let _lastGeneratedKey = '';
 let _selectedWeightPointKey = null;
 let weightTrendChart = null;
 let keyCache = null;
@@ -138,13 +137,6 @@ function randomBase64(byteCount) {
   const bytes = new Uint8Array(byteCount);
   requireRandomCrypto().getRandomValues(bytes);
   return bytesToBase64(bytes);
-}
-
-function generateAccessKey() {
-  const bytes = new Uint8Array(16);
-  requireRandomCrypto().getRandomValues(bytes);
-  const hex = bytesToHex(bytes);
-  return `bb-${hex.match(/.{1,4}/g).join('-')}`;
 }
 
 async function ensureDeviceId() {
@@ -582,7 +574,12 @@ async function fetchRemoteVault() {
     headers: { Accept: 'application/json' },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || body.error || 'Cloud sync failed.');
+  if (!res.ok) {
+    const error = new Error(body.message || body.error || 'Cloud sync failed.');
+    error.status = res.status;
+    error.code = body.error;
+    throw error;
+  }
   return body;
 }
 
@@ -595,8 +592,22 @@ async function putRemoteVault(vault, baseEtag) {
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 409) return { conflict: true };
-  if (!res.ok) throw new Error(body.message || body.error || 'Cloud sync failed.');
+  if (!res.ok) {
+    const error = new Error(body.message || body.error || 'Cloud sync failed.');
+    error.status = res.status;
+    error.code = body.error;
+    throw error;
+  }
   return body;
+}
+
+function isInstanceGateError(error) {
+  return (
+    error?.code === 'instance_key_required' ||
+    error?.code === 'instance_key_mismatch' ||
+    error?.status === 403 ||
+    error?.status === 428
+  );
 }
 
 function scheduleSync(delayMs = 500) {
@@ -681,7 +692,18 @@ async function syncNow({ quiet = false, force = false } = {}) {
     setOffline(false);
     updateSyncUi();
   })()
-    .catch((error) => {
+    .catch(async (error) => {
+      if (isInstanceGateError(error)) {
+        await kvDelete(SESSION_KEY);
+        session = {};
+        data = null;
+        clearTimeout(syncTimer);
+        setCloudSyncDisabled(false);
+        setOffline(false);
+        showSetup();
+        setSetupStatus(error.message || 'This access key cannot join this deployment.', true);
+        return;
+      }
       setOffline(true);
       setSyncStatus('Encrypted sync', error.message || 'Waiting for connection');
       throw error;
@@ -693,14 +715,14 @@ async function syncNow({ quiet = false, force = false } = {}) {
   return syncInFlight;
 }
 
-async function unlockWithAccessKey(rawKey) {
+async function joinWithAccessKey(rawKey) {
   const accessKey = rawKey.trim();
   if (normalizeAccessKey(accessKey).length < 18) {
     setSetupStatus('Enter a longer access key.', true);
     return;
   }
 
-  setSetupStatus('Unlocking...');
+  setSetupStatus('Joining...');
   try {
     requireVaultCrypto();
   } catch (error) {
@@ -713,6 +735,7 @@ async function unlockWithAccessKey(rawKey) {
   const stored = await kvGet(SESSION_KEY);
   const storedData = await kvGet(DATA_KEY);
   const hasLocalVault = storedData?.vault && storedData.familyId === familyId;
+  const previousSession = session;
   session = {
     ...(stored?.familyId === familyId ? stored : {}),
     familyId,
@@ -720,19 +743,24 @@ async function unlockWithAccessKey(rawKey) {
     rememberKey,
   };
   await ensureDeviceId();
-  await persistSession();
 
   try {
+    const remote = await fetchRemoteVault();
+
     if (hasLocalVault) {
+      await persistSession();
       await loadData();
       showApp();
       setOffline(false);
       setSetupStatus('');
-      syncNow({ quiet: true }).catch(() => {});
+      if (remote.syncDisabled) {
+        setCloudSyncDisabled(true);
+      } else {
+        syncNow({ quiet: true }).catch(() => {});
+      }
       return;
     }
 
-    const remote = await fetchRemoteVault();
     if (remote.syncDisabled) {
       setCloudSyncDisabled(true);
       await saveData(buildEmptyData());
@@ -760,7 +788,13 @@ async function unlockWithAccessKey(rawKey) {
     setSetupStatus('');
     syncNow({ quiet: true }).catch(() => {});
   } catch (error) {
+    if (isInstanceGateError(error)) {
+      session = previousSession || {};
+      throw error;
+    }
+
     if (hasLocalVault) {
+      await persistSession();
       await loadData();
       showApp();
       setOffline(true);
@@ -769,14 +803,7 @@ async function unlockWithAccessKey(rawKey) {
       return;
     }
 
-    if (normalizeAccessKey(accessKey) === normalizeAccessKey(_lastGeneratedKey)) {
-      await saveData(buildEmptyData());
-      showApp();
-      setOffline(true);
-      setSetupStatus('');
-      return;
-    }
-
+    session = previousSession || {};
     throw error;
   }
 }
@@ -2114,21 +2141,9 @@ async function copyText(text) {
 }
 
 function wireSetup() {
-  document.getElementById('generate-key-btn').addEventListener('click', async () => {
-    _lastGeneratedKey = generateAccessKey();
-    document.getElementById('access-key-input').value = _lastGeneratedKey;
-    document.getElementById('copy-generated-key-btn').classList.remove('hidden');
-    setSetupStatus('Key created. Copy it before adding another parent.');
-  });
-
-  document.getElementById('copy-generated-key-btn').addEventListener('click', async () => {
-    const copied = await copyText(_lastGeneratedKey || document.getElementById('access-key-input').value);
-    setSetupStatus(copied ? 'Copied.' : 'Select the key and copy it.');
-  });
-
   document.getElementById('unlock-key-btn').addEventListener('click', () => {
-    unlockWithAccessKey(document.getElementById('access-key-input').value).catch((error) => {
-      setSetupStatus(error.message || 'Could not unlock.', true);
+    joinWithAccessKey(document.getElementById('access-key-input').value).catch((error) => {
+      setSetupStatus(error.message || 'Could not join.', true);
     });
   });
 }
