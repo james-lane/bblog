@@ -760,6 +760,40 @@ function formatElapsed(ms) {
   return remHours > 0 ? `${days}d ${remHours}h ago` : `${days}d ago`;
 }
 
+function milkAmount(entry) {
+  const amount = parseFloat(entry.amount);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function milkLiveStats(now = Date.now()) {
+  const windowStart = now - 86400000;
+  const stats = {};
+
+  for (const e of entries()) {
+    if (e.type !== 'milk' || !e.baby) continue;
+    const t = new Date(e.timestamp).getTime();
+    if (!Number.isFinite(t) || t > now) continue;
+
+    if (!stats[e.baby]) {
+      stats[e.baby] = { lastAt: null, rollingAmount: 0, rollingFeeds: 0 };
+    }
+
+    if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
+      stats[e.baby].lastAt = t;
+    }
+
+    if (t >= windowStart) {
+      const amount = milkAmount(e);
+      if (amount > 0) {
+        stats[e.baby].rollingAmount += amount;
+        stats[e.baby].rollingFeeds += 1;
+      }
+    }
+  }
+
+  return stats;
+}
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -1418,17 +1452,19 @@ function dashDayLabel(d) {
 
 function renderDashboard() {
   const day = dashDay();
+  const now = Date.now();
   document.getElementById('dash-date-label').textContent = dashDayLabel(day);
   document.getElementById('dash-next').disabled = _dashOffset >= 0;
 
   const start = day.getTime();
   const end = start + 86400000;
   const totals = {};
+  const liveStats = milkLiveStats(now);
   for (const e of entries()) {
     if (e.type !== 'milk') continue;
     const t = new Date(e.timestamp).getTime();
     if (t < start || t >= end) continue;
-    totals[e.baby] = (totals[e.baby] || 0) + (parseFloat(e.amount) || 0);
+    totals[e.baby] = (totals[e.baby] || 0) + milkAmount(e);
   }
 
   const chart = document.getElementById('dash-milk-chart');
@@ -1441,11 +1477,28 @@ function renderDashboard() {
   chart.innerHTML = activeBabies
     .map((baby) => {
       const total = Math.round(totals[baby.id] || 0);
+      const stats = liveStats[baby.id];
+      const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
+      const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
+      const avgText = avg != null ? `${avg} ml` : '—';
       return `
-      <div class="dash-metric">
-        <div class="dash-metric-name" style="color:${baby.colour}">${escapeHtml(baby.name)}</div>
-        <div class="dash-metric-value">${total > 0 ? total : '—'}</div>
-        <div class="dash-metric-unit">${total > 0 ? 'ml' : ''}</div>
+      <div class="dash-metric" style="--baby-colour:${baby.colour}">
+        <div class="dash-metric-name">${escapeHtml(baby.name)}</div>
+        <div class="dash-metric-insights">
+          <div class="dash-metric-insight">
+            <span class="dash-metric-label">Last feed</span>
+            <span class="dash-metric-text">${escapeHtml(lastFeed)}</span>
+          </div>
+          <div class="dash-metric-insight">
+            <span class="dash-metric-label">24h avg/feed</span>
+            <span class="dash-metric-text">${escapeHtml(avgText)}</span>
+          </div>
+        </div>
+        <div class="dash-metric-total">
+          <span class="dash-metric-label">Milk total</span>
+          <span class="dash-metric-value">${total > 0 ? total : '—'}</span>
+          <span class="dash-metric-unit">${total > 0 ? 'ml' : ''}</span>
+        </div>
       </div>`;
     })
     .join('');

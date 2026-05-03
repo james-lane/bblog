@@ -779,17 +779,65 @@ main::before {
 
 .dash-metric {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   padding: 14px 16px;
   background: var(--bg);
   border-radius: var(--radius-sm);
+  border-left: 4px solid var(--baby-colour, var(--accent));
 }
 
 .dash-metric-name {
-  flex: 1;
   font-size: 1rem;
   font-weight: 700;
+  color: var(--baby-colour, var(--accent));
+}
+
+.dash-metric-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dash-metric-insight {
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dash-metric-label {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.dash-metric-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.dash-metric-total {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.dash-metric-total .dash-metric-label {
+  margin-right: auto;
+  align-self: center;
 }
 
 .dash-metric-value {
@@ -804,6 +852,12 @@ main::before {
   font-weight: 600;
   color: var(--text-muted);
   min-width: 20px;
+}
+
+@media (max-width: 360px) {
+  .dash-metric-insights {
+    grid-template-columns: 1fr;
+  }
 }
 
 .hidden { display: none !important; }
