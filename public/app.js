@@ -23,6 +23,7 @@ let syncInFlight = null;
 let syncTimer = null;
 let _isOffline = false;
 let _cloudSyncDisabled = false;
+let _demoMode = false;
 let _dashOffset = 0;
 let _medEditId = null;
 let _personEdit = null;
@@ -55,6 +56,10 @@ function requireVaultCrypto() {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function demoModeRequested() {
+  return new URLSearchParams(globalThis.location?.search || '').get('demo') === '1';
 }
 
 function uid(prefix = '') {
@@ -269,6 +274,35 @@ function buildEmptyData() {
   });
 }
 
+function buildDemoData() {
+  const now = Date.now();
+  const stamp = nowIso();
+  const hoursAgo = (hours) => new Date(now - hours * 3600000).toISOString();
+
+  return normalizeData({
+    schemaVersion: 1,
+    meta: { createdAt: stamp, updatedAt: stamp },
+    users: [{ id: 'demo_parent', name: 'Demo Parent', createdAt: stamp, updatedAt: stamp }],
+    babies: [
+      { id: 'demo_ava', name: 'Ava', createdAt: stamp, updatedAt: stamp },
+      { id: 'demo_luca', name: 'Luca', createdAt: stamp, updatedAt: stamp },
+    ],
+    medications: [],
+    entries: [
+      { id: 'demo_ava_feed_1', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 90, unit: 'ml', timestamp: hoursAgo(1.25) },
+      { id: 'demo_ava_feed_2', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 120, unit: 'ml', timestamp: hoursAgo(5.5) },
+      { id: 'demo_ava_feed_3', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 75, unit: 'ml', timestamp: hoursAgo(12) },
+      { id: 'demo_ava_feed_4', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 105, unit: 'ml', timestamp: hoursAgo(27) },
+      { id: 'demo_ava_poo_1', type: 'poo', baby: 'demo_ava', user: 'demo_parent', timestamp: hoursAgo(3.25) },
+      { id: 'demo_luca_feed_1', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 110, unit: 'ml', timestamp: hoursAgo(2.1) },
+      { id: 'demo_luca_feed_2', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 140, unit: 'ml', timestamp: hoursAgo(9) },
+      { id: 'demo_luca_feed_3', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 95, unit: 'ml', timestamp: hoursAgo(18) },
+      { id: 'demo_luca_feed_4', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 130, unit: 'ml', timestamp: hoursAgo(30) },
+      { id: 'demo_luca_poo_1', type: 'poo', baby: 'demo_luca', user: 'demo_parent', timestamp: hoursAgo(7) },
+    ],
+  });
+}
+
 function normalizeRecordList(records, mapper) {
   return (Array.isArray(records) ? records : [])
     .filter((item) => item && item.id)
@@ -458,6 +492,8 @@ async function loadData() {
 
 async function saveData(nextData = data) {
   data = normalizeData(nextData);
+  if (_demoMode) return;
+
   if (session?.accessKey && session?.familyId) {
     const vault = await encryptVault(data);
     await kvSet(DATA_KEY, { familyId: session.familyId, vault });
@@ -515,6 +551,7 @@ function setSyncStatus(title, detail) {
 }
 
 function syncDetailText() {
+  if (_demoMode) return 'Demo data - not saved or synced';
   if (!session?.familyId) return 'No access key on this device';
   if (_cloudSyncDisabled) return 'Local only - Vercel Blob not connected';
   if (_isOffline) return 'Waiting for connection';
@@ -551,6 +588,7 @@ async function putRemoteVault(vault, baseEtag) {
 }
 
 function scheduleSync(delayMs = 500) {
+  if (_demoMode) return;
   if (!session?.accessKey || !session?.familyId) return;
   if (_cloudSyncDisabled) return;
   clearTimeout(syncTimer);
@@ -558,6 +596,7 @@ function scheduleSync(delayMs = 500) {
 }
 
 async function syncNow({ quiet = false, force = false } = {}) {
+  if (_demoMode) return;
   if (!session?.accessKey || !session?.familyId) return;
   if (_cloudSyncDisabled && !force) {
     setOffline(false);
@@ -728,6 +767,16 @@ function showApp() {
   if (!hasRequiredSetup()) setActiveTab('settings');
 }
 
+function activateDemoMode() {
+  _demoMode = true;
+  _cloudSyncDisabled = false;
+  _dashOffset = 0;
+  session = { demo: true, rememberKey: false };
+  data = buildDemoData();
+  showApp();
+  setActiveTab('dashboard');
+}
+
 function formatTime(isoString) {
   const d = new Date(isoString);
   const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -787,6 +836,8 @@ function milkLiveStats(now = Date.now()) {
       if (amount > 0) {
         stats[e.baby].rollingAmount += amount;
         stats[e.baby].rollingFeeds += 1;
+        stats[e.baby].rollingMin = stats[e.baby].rollingMin == null ? amount : Math.min(stats[e.baby].rollingMin, amount);
+        stats[e.baby].rollingMax = stats[e.baby].rollingMax == null ? amount : Math.max(stats[e.baby].rollingMax, amount);
       }
     }
   }
@@ -1481,19 +1532,33 @@ function renderDashboard() {
       const stats = liveStats[baby.id];
       const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
       const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
+      const minText = stats?.rollingFeeds ? `${Math.round(stats.rollingMin)} ml` : '—';
       const avgText = avg != null ? `${avg} ml` : '—';
+      const maxText = stats?.rollingFeeds ? `${Math.round(stats.rollingMax)} ml` : '—';
       return `
-      <div class="dash-metric dash-live-metric" style="--baby-colour:${baby.colour}">
-        <div class="dash-metric-name">${escapeHtml(baby.name)}</div>
-        <div class="dash-metric-insights">
-          <div class="dash-metric-insight">
-            <span class="dash-metric-label">Last feed</span>
-            <span class="dash-metric-text">${escapeHtml(lastFeed)}</span>
+      <div class="dash-live-metric" style="--baby-colour:${baby.colour}">
+        <div class="dash-live-info">
+          <div class="dash-live-name">${escapeHtml(baby.name)}</div>
+          <div class="dash-live-window">Rolling previous 24h</div>
+          <div class="dash-live-rolling">
+            <div class="dash-live-stat">
+              <span class="dash-live-stat-label">Min</span>
+              <span class="dash-live-stat-value">${escapeHtml(minText)}</span>
+            </div>
+            <div class="dash-live-stat">
+              <span class="dash-live-stat-label">Max</span>
+              <span class="dash-live-stat-value">${escapeHtml(maxText)}</span>
+            </div>
+            <div class="dash-live-stat-divider" aria-hidden="true"></div>
+            <div class="dash-live-stat">
+              <span class="dash-live-stat-label">Avg</span>
+              <span class="dash-live-stat-value">${escapeHtml(avgText)}</span>
+            </div>
           </div>
-          <div class="dash-metric-insight">
-            <span class="dash-metric-label">24h avg/feed</span>
-            <span class="dash-metric-text">${escapeHtml(avgText)}</span>
-          </div>
+        </div>
+        <div class="dash-live-last">
+          <span class="dash-live-last-label">Last feed</span>
+          <span class="dash-live-last-value">${escapeHtml(lastFeed)}</span>
         </div>
       </div>`;
     })
@@ -1705,6 +1770,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   await registerServiceWorker();
   wireSetup();
   wireApp();
+
+  if (demoModeRequested()) {
+    activateDemoMode();
+    return;
+  }
+
   await loadSession();
 
   if (session?.familyId && session?.accessKey) {
