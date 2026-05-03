@@ -12,12 +12,23 @@
   <title>bblog</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260503-instance-key" />
+  <link rel="stylesheet" href="/styles.css?v=20260503-install-prompt" />
 </head>
 <body>
 
   <div id="offline-banner" class="offline-banner hidden">
     Saved here. Cloud sync will resume when this device is back online.
+  </div>
+
+  <div id="install-banner" class="install-banner hidden" aria-live="polite">
+    <div class="install-banner-copy">
+      <strong>Add bblog to your Home Screen</strong>
+      <span id="install-banner-detail">Open it in a standalone app view.</span>
+    </div>
+    <div class="install-banner-actions">
+      <button id="install-dismiss-btn" class="install-banner-btn install-banner-btn-secondary" type="button" aria-label="Dismiss add to home screen suggestion">×</button>
+      <button id="install-action-btn" class="install-banner-btn install-banner-btn-primary" type="button">Add</button>
+    </div>
   </div>
 
   <section id="setup-screen" class="setup-screen">
@@ -278,6 +289,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260503-instance-key"></script>
+  <script src="/app.js?v=20260503-install-prompt"></script>
 </body>
 </html>

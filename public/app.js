@@ -11,6 +11,8 @@ const OUNCES_PER_POUND = 16;
 const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
 const SYNC_RETRY_DELAY_MS = 3000;
 const SYNC_FOREGROUND_MIN_INTERVAL_MS = 5 * 60 * 1000;
+const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
+const INSTALL_DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const formState = {
   user: null,
@@ -35,6 +37,8 @@ let _personEdit = null;
 let _selectedWeightPointKey = null;
 let weightTrendChart = null;
 let keyCache = null;
+let deferredInstallPrompt = null;
+let _installSuggestionDismissed = false;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -66,6 +70,64 @@ function nowIso() {
 
 function demoModeRequested() {
   return new URLSearchParams(globalThis.location?.search || '').get('demo') === '1';
+}
+
+function isStandaloneDisplay() {
+  return Boolean(
+    globalThis.matchMedia?.('(display-mode: standalone)').matches ||
+      globalThis.matchMedia?.('(display-mode: fullscreen)').matches ||
+      globalThis.matchMedia?.('(display-mode: minimal-ui)').matches ||
+      globalThis.navigator?.standalone === true,
+  );
+}
+
+function isIosLike() {
+  const ua = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+  return /iphone|ipad|ipod/i.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function installDismissedRecently() {
+  try {
+    const dismissedAt = Number(localStorage.getItem(INSTALL_DISMISSED_KEY));
+    return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < INSTALL_DISMISS_DURATION_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberInstallDismissal() {
+  try {
+    localStorage.setItem(INSTALL_DISMISSED_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
+function installSuggestionDetail() {
+  if (deferredInstallPrompt) return 'Open it from your Home Screen in a standalone app view.';
+  if (isIosLike()) return 'In Safari, use Share, then Add to Home Screen.';
+  return 'Use your browser menu to add bblog to your Home Screen.';
+}
+
+function updateInstallSuggestion() {
+  const banner = document.getElementById('install-banner');
+  const detail = document.getElementById('install-banner-detail');
+  const actionBtn = document.getElementById('install-action-btn');
+  if (!banner || !detail || !actionBtn) return;
+
+  const shouldShow = !isStandaloneDisplay() && !_installSuggestionDismissed && !installDismissedRecently();
+  banner.classList.toggle('hidden', !shouldShow);
+  if (!shouldShow) return;
+
+  detail.textContent = installSuggestionDetail();
+  actionBtn.classList.toggle('hidden', !deferredInstallPrompt);
+}
+
+function dismissInstallSuggestion() {
+  _installSuggestionDismissed = true;
+  rememberInstallDismissal();
+  updateInstallSuggestion();
 }
 
 function uid(prefix = '') {
@@ -812,6 +874,7 @@ function showSetup() {
   document.getElementById('setup-screen').classList.remove('hidden');
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
+  updateInstallSuggestion();
 }
 
 function hasRequiredSetup() {
@@ -823,6 +886,7 @@ function showApp() {
   document.getElementById('app-shell').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
   setOffline(!navigator.onLine);
+  updateInstallSuggestion();
   renderAll();
   if (!hasRequiredSetup()) setActiveTab('settings');
 }
@@ -2148,6 +2212,52 @@ function wireSetup() {
   });
 }
 
+function wireInstallSuggestion() {
+  document.getElementById('install-dismiss-btn').addEventListener('click', dismissInstallSuggestion);
+  document.getElementById('install-action-btn').addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+
+    try {
+      await promptEvent.prompt();
+      await promptEvent.userChoice;
+    } catch {
+      /* ignore */
+    }
+
+    _installSuggestionDismissed = true;
+    rememberInstallDismissal();
+    updateInstallSuggestion();
+  });
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallSuggestion();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    _installSuggestionDismissed = true;
+    rememberInstallDismissal();
+    updateInstallSuggestion();
+  });
+
+  ['standalone', 'fullscreen', 'minimal-ui'].forEach((mode) => {
+    const query = globalThis.matchMedia?.(`(display-mode: ${mode})`);
+    if (!query) return;
+    if (query.addEventListener) {
+      query.addEventListener('change', updateInstallSuggestion);
+    } else if (query.addListener) {
+      query.addListener(updateInstallSuggestion);
+    }
+  });
+
+  updateInstallSuggestion();
+}
+
 function wireApp() {
   document.getElementById('amount-input').addEventListener('input', (e) => {
     let val = e.target.value.replace(/[^0-9.]/g, '');
@@ -2269,6 +2379,7 @@ async function registerServiceWorker() {
 document.addEventListener('DOMContentLoaded', async () => {
   await registerServiceWorker();
   wireSetup();
+  wireInstallSuggestion();
   wireApp();
 
   if (demoModeRequested()) {

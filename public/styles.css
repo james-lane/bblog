@@ -65,6 +65,88 @@ body {
   background: #7c2d12;
 }
 
+.install-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border-bottom: 1.5px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.install-banner-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.install-banner-copy strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.install-banner-copy span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.install-banner-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.install-banner-btn {
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.install-banner-btn:active {
+  opacity: 0.7;
+}
+
+.install-banner-btn-primary {
+  min-width: 58px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.install-banner-btn-secondary {
+  width: 36px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+@media (max-width: 430px) {
+  .install-banner {
+    align-items: flex-start;
+  }
+
+  .install-banner-actions {
+    padding-top: 1px;
+  }
+}
+
 main {
   flex: 1;
   min-height: 0;
