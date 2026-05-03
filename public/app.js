@@ -873,6 +873,10 @@ function formatWeightDate(isoString) {
   return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
+function formatWeightTrendDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
 function latestWeightsByBaby() {
   const latest = {};
   for (const e of entries()) {
@@ -885,6 +889,22 @@ function latestWeightsByBaby() {
     }
   }
   return latest;
+}
+
+function weightTrendByBaby(activeBabies) {
+  const babyIds = new Set(activeBabies.map((baby) => baby.id));
+  const byBaby = Object.fromEntries(activeBabies.map((baby) => [baby.id, []]));
+  for (const e of entries()) {
+    if (e.type !== 'weight' || !babyIds.has(e.baby)) continue;
+    const grams = weightGrams(e);
+    const timestamp = new Date(e.timestamp).getTime();
+    if (!grams || !Number.isFinite(timestamp)) continue;
+    byBaby[e.baby].push({ timestamp, grams });
+  }
+  for (const points of Object.values(byBaby)) {
+    points.sort((a, b) => a.timestamp - b.timestamp);
+  }
+  return byBaby;
 }
 
 function milkLiveStats(now = Date.now()) {
@@ -927,6 +947,92 @@ function milkLiveStats(now = Date.now()) {
   });
 
   return stats;
+}
+
+function renderWeightTrend(activeBabies) {
+  const seriesByBaby = weightTrendByBaby(activeBabies);
+  const series = activeBabies
+    .map((baby) => ({ baby, points: seriesByBaby[baby.id] || [] }))
+    .filter(({ points }) => points.length);
+  const allPoints = series.flatMap(({ points }) => points);
+
+  if (!allPoints.length) {
+    return '<p class="log-empty dash-weight-empty">No weights logged yet.</p>';
+  }
+
+  const width = 340;
+  const height = 184;
+  const pad = { top: 14, right: 14, bottom: 32, left: 48 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const timestamps = allPoints.map((point) => point.timestamp);
+  const weights = allPoints.map((point) => point.grams);
+  let minTime = Math.min(...timestamps);
+  let maxTime = Math.max(...timestamps);
+  let minWeight = Math.min(...weights);
+  let maxWeight = Math.max(...weights);
+
+  if (minTime === maxTime) {
+    minTime -= 43200000;
+    maxTime += 43200000;
+  }
+
+  const weightPadding = Math.max(50, (maxWeight - minWeight) * 0.12);
+  minWeight = Math.max(0, minWeight - weightPadding);
+  maxWeight += weightPadding;
+  if (minWeight === maxWeight) maxWeight = minWeight + 100;
+
+  const x = (timestamp) => pad.left + ((timestamp - minTime) / (maxTime - minTime)) * plotWidth;
+  const y = (grams) => pad.top + (1 - (grams - minWeight) / (maxWeight - minWeight)) * plotHeight;
+  const topY = pad.top;
+  const bottomY = pad.top + plotHeight;
+  const startLabel = formatWeightTrendDate(minTime);
+  const endLabel = formatWeightTrendDate(maxTime);
+  const minLabel = formatWeightLbOz(minWeight);
+  const maxLabel = formatWeightLbOz(maxWeight);
+
+  const lines = series
+    .map(({ baby, points }) => {
+      const path = points
+        .map((point, index) => `${index ? 'L' : 'M'} ${x(point.timestamp).toFixed(1)} ${y(point.grams).toFixed(1)}`)
+        .join(' ');
+      const dots = points
+        .map(
+          (point) =>
+            `<circle class="dash-weight-dot" cx="${x(point.timestamp).toFixed(1)}" cy="${y(point.grams).toFixed(1)}" r="3.2" fill="${escapeHtml(baby.colour)}" />`,
+        )
+        .join('');
+      return `
+        ${points.length > 1 ? `<path class="dash-weight-line" d="${path}" stroke="${escapeHtml(baby.colour)}" />` : ''}
+        ${dots}`;
+    })
+    .join('');
+
+  const legend = series
+    .map(
+      ({ baby }) => `
+        <span class="dash-weight-legend-item">
+          <span class="dash-weight-legend-swatch" style="--baby-colour:${baby.colour}"></span>
+          <span>${escapeHtml(baby.name)}</span>
+        </span>`,
+    )
+    .join('');
+
+  return `
+    <div class="dash-weight-plot">
+      <svg class="dash-weight-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Weight changes over time">
+        <line class="dash-weight-grid" x1="${pad.left}" y1="${topY}" x2="${width - pad.right}" y2="${topY}" />
+        <line class="dash-weight-grid" x1="${pad.left}" y1="${bottomY}" x2="${width - pad.right}" y2="${bottomY}" />
+        <line class="dash-weight-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${bottomY}" />
+        <line class="dash-weight-axis" x1="${pad.left}" y1="${bottomY}" x2="${width - pad.right}" y2="${bottomY}" />
+        <text class="dash-weight-axis-label" x="0" y="${topY + 4}">${escapeHtml(maxLabel)}</text>
+        <text class="dash-weight-axis-label" x="0" y="${bottomY + 4}">${escapeHtml(minLabel)}</text>
+        <text class="dash-weight-date-label" x="${pad.left}" y="${height - 6}">${escapeHtml(startLabel)}</text>
+        <text class="dash-weight-date-label dash-weight-date-label-end" x="${width - pad.right}" y="${height - 6}">${escapeHtml(endLabel)}</text>
+        ${lines}
+      </svg>
+      <div class="dash-weight-legend">${legend}</div>
+    </div>`;
 }
 
 function escapeHtml(str) {
@@ -1699,10 +1805,12 @@ function renderDashboard() {
 
   const live = document.getElementById('dash-live-stats');
   const chart = document.getElementById('dash-milk-chart');
+  const weightChart = document.getElementById('dash-weight-chart');
   const activeBabies = babies();
   if (!activeBabies.length) {
     live.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     chart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+    weightChart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
 
@@ -1769,6 +1877,8 @@ function renderDashboard() {
       </div>`;
     })
     .join('');
+
+  weightChart.innerHTML = renderWeightTrend(activeBabies);
 }
 
 function renderAll() {

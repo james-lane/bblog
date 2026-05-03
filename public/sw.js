@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bblog-v22';
+const CACHE_NAME = 'bblog-v23';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260503-weight-stack',
-  '/app.js?v=20260503-weight-stack',
+  '/styles.css?v=20260503-weight-trend',
+  '/app.js?v=20260503-weight-trend',
   '/manifest.webmanifest',
   '/icon.svg',
 ];
