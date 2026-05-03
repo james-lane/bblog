@@ -25,6 +25,7 @@ let data = null;
 let session = null;
 let syncInFlight = null;
 let syncTimer = null;
+let dashboardClockTimer = null;
 let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
@@ -2005,6 +2006,8 @@ function renderDashboard() {
 
   weightChart.innerHTML = renderWeightTrend(activeBabies);
   initWeightTrendChart(activeBabies);
+  refreshDashboardLiveTimes();
+  scheduleDashboardClockRefresh();
 }
 
 function refreshDashboardLiveTimes() {
@@ -2021,6 +2024,29 @@ function refreshDashboardLiveTimes() {
     if (valueEl) valueEl.textContent = lastFeedParts.value;
     if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
   });
+}
+
+function nextDashboardClockDelay(now = Date.now()) {
+  let nextDelay = 60000;
+  const liveStats = milkLiveStats(now);
+
+  for (const stat of Object.values(liveStats)) {
+    if (stat?.lastAt == null) continue;
+    const elapsed = Math.max(0, now - stat.lastAt);
+    const delay = elapsed < 60000 ? 60000 - elapsed : 60000 - (elapsed % 60000);
+    nextDelay = Math.min(nextDelay, delay);
+  }
+
+  return Math.max(1000, Math.ceil(nextDelay) + 50);
+}
+
+function scheduleDashboardClockRefresh() {
+  clearTimeout(dashboardClockTimer);
+  if (!data || !document.getElementById('tab-dashboard')?.classList.contains('active')) return;
+  dashboardClockTimer = setTimeout(() => {
+    refreshDashboardLiveTimes();
+    scheduleDashboardClockRefresh();
+  }, nextDashboardClockDelay());
 }
 
 function renderAll() {
@@ -2046,6 +2072,7 @@ function setActiveTab(tabName) {
   if (tabName === 'log') renderLog();
   if (tabName === 'settings') renderSettings();
   if (tabName === 'dashboard') renderDashboard();
+  if (tabName !== 'dashboard') clearTimeout(dashboardClockTimer);
 }
 
 async function copyText(text) {
@@ -2197,6 +2224,12 @@ function wireApp() {
   });
   window.addEventListener('offline', () => setOffline(true));
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      refreshDashboardLiveTimes();
+      scheduleDashboardClockRefresh();
+    } else {
+      clearTimeout(dashboardClockTimer);
+    }
     if (document.visibilityState === 'visible' && shouldSyncOnForeground()) {
       syncNow({ quiet: true }).catch(() => {});
     }
