@@ -872,6 +872,10 @@ main::before {
   stroke-width: 1;
 }
 
+.dash-weight-grid-vertical {
+  opacity: 0.45;
+}
+
 .dash-weight-axis {
   stroke: var(--text-muted);
   stroke-width: 1;
@@ -897,14 +901,22 @@ main::before {
   font-weight: 700;
 }
 
+.dash-weight-axis-label {
+  text-anchor: end;
+}
+
+.dash-weight-date-label-mid {
+  text-anchor: middle;
+}
+
 .dash-weight-date-label-end {
   text-anchor: end;
 }
 
 .dash-weight-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px 12px;
   color: var(--text);
   font-size: 0.82rem;
   font-weight: 700;
@@ -912,15 +924,33 @@ main::before {
 
 .dash-weight-legend-item {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 
 .dash-weight-legend-swatch {
+  flex: 0 0 auto;
+  margin-top: 4px;
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: var(--baby-colour, var(--accent));
+}
+
+.dash-weight-legend-copy {
+  min-width: 0;
+}
+
+.dash-weight-legend-name,
+.dash-weight-legend-detail {
+  display: block;
+}
+
+.dash-weight-legend-detail {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.2;
 }
 
 .dash-weight-empty {

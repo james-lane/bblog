@@ -861,6 +861,13 @@ function formatWeightLbOz(grams) {
   return `${pounds} lb ${formatOunces(ounces)} oz`;
 }
 
+function formatWeightDelta(grams) {
+  if (!Number.isFinite(grams) || grams === 0) return 'no change';
+  const sign = grams > 0 ? '+' : '-';
+  const absOunces = Math.round((Math.abs(grams) / GRAMS_PER_OUNCE) * 10) / 10;
+  return `${sign}${formatOunces(absOunces)} oz`;
+}
+
 function formatWeightDate(isoString) {
   const d = new Date(isoString);
   if (!Number.isFinite(d.getTime())) return '';
@@ -960,9 +967,9 @@ function renderWeightTrend(activeBabies) {
     return '<p class="log-empty dash-weight-empty">No weights logged yet.</p>';
   }
 
-  const width = 340;
-  const height = 184;
-  const pad = { top: 14, right: 14, bottom: 32, left: 48 };
+  const width = 360;
+  const height = 220;
+  const pad = { top: 16, right: 18, bottom: 44, left: 72 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const timestamps = allPoints.map((point) => point.timestamp);
@@ -984,12 +991,35 @@ function renderWeightTrend(activeBabies) {
 
   const x = (timestamp) => pad.left + ((timestamp - minTime) / (maxTime - minTime)) * plotWidth;
   const y = (grams) => pad.top + (1 - (grams - minWeight) / (maxWeight - minWeight)) * plotHeight;
-  const topY = pad.top;
   const bottomY = pad.top + plotHeight;
-  const startLabel = formatWeightTrendDate(minTime);
-  const endLabel = formatWeightTrendDate(maxTime);
-  const minLabel = formatWeightLbOz(minWeight);
-  const maxLabel = formatWeightLbOz(maxWeight);
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const grams = maxWeight - (maxWeight - minWeight) * ratio;
+    return { y: pad.top + plotHeight * ratio, label: formatWeightLbOz(grams) };
+  });
+  const xTicks = [0, 0.5, 1].map((ratio) => {
+    const timestamp = minTime + (maxTime - minTime) * ratio;
+    return { x: pad.left + plotWidth * ratio, label: formatWeightTrendDate(timestamp) };
+  });
+  const gridLines = yTicks
+    .map((tick) => `<line class="dash-weight-grid" x1="${pad.left}" y1="${tick.y.toFixed(1)}" x2="${width - pad.right}" y2="${tick.y.toFixed(1)}" />`)
+    .join('');
+  const yLabels = yTicks
+    .map((tick) => `<text class="dash-weight-axis-label" x="${pad.left - 8}" y="${(tick.y + 4).toFixed(1)}">${escapeHtml(tick.label)}</text>`)
+    .join('');
+  const xLabels = xTicks
+    .map((tick, index) => {
+      const labelClass =
+        index === xTicks.length - 1
+          ? 'dash-weight-date-label dash-weight-date-label-end'
+          : index === 1
+            ? 'dash-weight-date-label dash-weight-date-label-mid'
+            : 'dash-weight-date-label';
+      return `<text class="${labelClass}" x="${tick.x.toFixed(1)}" y="${height - 8}">${escapeHtml(tick.label)}</text>`;
+    })
+    .join('');
+  const xGridLines = xTicks
+    .map((tick) => `<line class="dash-weight-grid dash-weight-grid-vertical" x1="${tick.x.toFixed(1)}" y1="${pad.top}" x2="${tick.x.toFixed(1)}" y2="${bottomY}" />`)
+    .join('');
 
   const lines = series
     .map(({ baby, points }) => {
@@ -1010,25 +1040,31 @@ function renderWeightTrend(activeBabies) {
 
   const legend = series
     .map(
-      ({ baby }) => `
+      ({ baby, points }) => {
+        const first = points[0];
+        const latest = points[points.length - 1];
+        const delta = formatWeightDelta(latest.grams - first.grams);
+        return `
         <span class="dash-weight-legend-item">
           <span class="dash-weight-legend-swatch" style="--baby-colour:${baby.colour}"></span>
-          <span>${escapeHtml(baby.name)}</span>
-        </span>`,
+          <span class="dash-weight-legend-copy">
+            <span class="dash-weight-legend-name">${escapeHtml(baby.name)}</span>
+            <span class="dash-weight-legend-detail">${escapeHtml(formatWeightLbOz(latest.grams))} · ${escapeHtml(delta)}</span>
+          </span>
+        </span>`;
+      },
     )
     .join('');
 
   return `
     <div class="dash-weight-plot">
       <svg class="dash-weight-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Weight changes over time">
-        <line class="dash-weight-grid" x1="${pad.left}" y1="${topY}" x2="${width - pad.right}" y2="${topY}" />
-        <line class="dash-weight-grid" x1="${pad.left}" y1="${bottomY}" x2="${width - pad.right}" y2="${bottomY}" />
+        ${gridLines}
+        ${xGridLines}
         <line class="dash-weight-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${bottomY}" />
         <line class="dash-weight-axis" x1="${pad.left}" y1="${bottomY}" x2="${width - pad.right}" y2="${bottomY}" />
-        <text class="dash-weight-axis-label" x="0" y="${topY + 4}">${escapeHtml(maxLabel)}</text>
-        <text class="dash-weight-axis-label" x="0" y="${bottomY + 4}">${escapeHtml(minLabel)}</text>
-        <text class="dash-weight-date-label" x="${pad.left}" y="${height - 6}">${escapeHtml(startLabel)}</text>
-        <text class="dash-weight-date-label dash-weight-date-label-end" x="${width - pad.right}" y="${height - 6}">${escapeHtml(endLabel)}</text>
+        ${yLabels}
+        ${xLabels}
         ${lines}
       </svg>
       <div class="dash-weight-legend">${legend}</div>
