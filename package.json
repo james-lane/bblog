@@ -6,7 +6,7 @@
   "description": "Offline-first, end-to-end encrypted bblog mobile web app.",
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "check": "node --check public/app.js && node --check public/sw.js && node --check api/vault.js && node --check scripts/dev-server.mjs"
+    "check": "node --check public/app.js && node --check public/sw.js && node --check api/vault.js && node --check scripts/dev-server.mjs && node --check scripts/contrast-check.mjs && node scripts/contrast-check.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.3.3",

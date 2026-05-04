@@ -15,7 +15,7 @@ const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
 const INSTALL_DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const THEME_STORAGE_KEY = 'bblog-theme';
 const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
-const DEFAULT_THEME_ID = 'linen';
+const DEFAULT_THEME_ID = 'playroom';
 const DEFAULT_COLOR_MODE = 'system';
 const COLOR_MODES = [
   { id: 'system', name: 'System' },
@@ -23,18 +23,6 @@ const COLOR_MODES = [
   { id: 'dark', name: 'Dark' },
 ];
 const APP_THEMES = [
-  {
-    id: 'linen',
-    name: 'Linen',
-    tone: 'Warm porcelain',
-    lightThemeColor: '#fbfefb',
-    darkThemeColor: '#231a16',
-    swatches: ['#d0b8ac', '#f3d8c7', '#efe5dc', '#fbfefb', '#ffffff'],
-    babyColours: {
-      light: ['#8e6254', '#b7795f', '#7c6f63', '#3c7c73', '#986b8f', '#9a6a44'],
-      dark: ['#f3d8c7', '#d0b8ac', '#fbfefb', '#a9d8d0', '#f0aebf', '#e6c073'],
-    },
-  },
   {
     id: 'playroom',
     name: 'Playroom',
@@ -45,18 +33,6 @@ const APP_THEMES = [
     babyColours: {
       light: ['#2384cf', '#cc306e', '#9f8700', '#0f7fb8', '#bf4776', '#4b8fc8'],
       dark: ['#7fc8f8', '#ff6392', '#ffe45e', '#5aa9e6', '#f9f9f9', '#ffb3cf'],
-    },
-  },
-  {
-    id: 'sugarplum',
-    name: 'Sugarplum',
-    tone: 'Lilac prism',
-    lightThemeColor: '#f4f4ed',
-    darkThemeColor: '#171225',
-    swatches: ['#f7aef8', '#b388eb', '#8093f1', '#72ddf7', '#f4f4ed'],
-    babyColours: {
-      light: ['#aa54b3', '#6f63c8', '#4d64d8', '#1598b5', '#8f4e79', '#5f7c2e'],
-      dark: ['#f7aef8', '#b388eb', '#8093f1', '#72ddf7', '#f4f4ed', '#f0ca7a'],
     },
   },
   {
@@ -72,18 +48,6 @@ const APP_THEMES = [
     },
   },
   {
-    id: 'aurora',
-    name: 'Aurora',
-    tone: 'Violet seafoam',
-    lightThemeColor: '#f7efff',
-    darkThemeColor: '#171126',
-    swatches: ['#ebc2ff', '#a873e8', '#5d7bd5', '#56d1dc', '#c2ffee'],
-    babyColours: {
-      light: ['#5d7bd5', '#8b55d0', '#249aa5', '#7d62bf', '#339d87', '#b34d86'],
-      dark: ['#ebc2ff', '#a873e8', '#56d1dc', '#c2ffee', '#86a4ff', '#ff9fc1'],
-    },
-  },
-  {
     id: 'carnival',
     name: 'Carnival',
     tone: 'Neon burst',
@@ -93,18 +57,6 @@ const APP_THEMES = [
     babyColours: {
       light: ['#8338ec', '#ff006e', '#3a86ff', '#fb5607', '#b88400', '#0b7f86'],
       dark: ['#ffbe0b', '#ff6ca7', '#3a86ff', '#fb5607', '#b891ff', '#70e2ff'],
-    },
-  },
-  {
-    id: 'lagoon',
-    name: 'Lagoon',
-    tone: 'Berry tide',
-    lightThemeColor: '#f7fbf9',
-    darkThemeColor: '#073b4c',
-    swatches: ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#073b4c'],
-    babyColours: {
-      light: ['#118ab2', '#ef476f', '#06a77d', '#b88a00', '#073b4c', '#8b4e9b'],
-      dark: ['#06d6a0', '#ffd166', '#ef476f', '#5ec8e5', '#f2fffb', '#ff99b1'],
     },
   },
   {
