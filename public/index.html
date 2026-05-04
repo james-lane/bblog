@@ -32,18 +32,21 @@
         const resolvedMode = safeColorMode === 'system' && prefersDark ? 'dark' : safeColorMode;
         const [lightThemeColor, darkThemeColor] = themeColors[safeTheme];
         const activeThemeColor = resolvedMode === 'dark' ? darkThemeColor : lightThemeColor;
+        const lightMetaColor = safeColorMode === 'dark' ? darkThemeColor : lightThemeColor;
+        const darkMetaColor = safeColorMode === 'light' ? lightThemeColor : darkThemeColor;
         document.documentElement.dataset.theme = safeTheme;
         document.documentElement.dataset.colorMode = safeColorMode;
         document.documentElement.style.setProperty('--pwa-safe-area-bg', activeThemeColor);
-        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]')?.setAttribute('content', lightThemeColor);
-        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]')?.setAttribute('content', darkThemeColor);
+        document.documentElement.style.background = activeThemeColor;
+        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]')?.setAttribute('content', lightMetaColor);
+        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]')?.setAttribute('content', darkMetaColor);
         document.querySelector('meta[name="theme-color"][data-app-theme-color]')?.setAttribute('content', activeThemeColor);
       } catch {
         /* ignore */
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260504-four-themes" />
+  <link rel="stylesheet" href="/styles.css?v=20260504-ios-safe-repaint" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -327,6 +330,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260504-four-themes"></script>
+  <script src="/app.js?v=20260504-ios-safe-repaint"></script>
 </body>
 </html>

@@ -266,6 +266,7 @@ button, input, textarea, select { font-family: inherit; }
 html {
   min-height: 100%;
   background: var(--pwa-safe-area-bg, var(--bg));
+  background-color: var(--pwa-safe-area-bg, var(--bg));
 }
 
 .pwa-safe-area-bg {
@@ -273,9 +274,12 @@ html {
   top: 0;
   left: 0;
   right: 0;
-  height: env(safe-area-inset-top, 0px);
+  height: calc(env(safe-area-inset-top, 0px) + 1px);
   background: var(--pwa-safe-area-bg, var(--bg));
+  background-color: var(--pwa-safe-area-bg, var(--bg));
   pointer-events: none;
+  transform: translateZ(0);
+  will-change: background-color, opacity;
   z-index: 30;
 }
 

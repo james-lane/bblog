@@ -201,6 +201,17 @@ function activeThemeColor(theme, colorMode = selectedColorMode()) {
   return resolvedColorMode(colorMode) === 'dark' ? theme.darkThemeColor : theme.lightThemeColor;
 }
 
+function themeMetaColors(theme, colorMode = selectedColorMode()) {
+  const safeMode = colorModeById(colorMode).id;
+  if (safeMode === 'light') {
+    return { light: theme.lightThemeColor, dark: theme.lightThemeColor, active: theme.lightThemeColor };
+  }
+  if (safeMode === 'dark') {
+    return { light: theme.darkThemeColor, dark: theme.darkThemeColor, active: theme.darkThemeColor };
+  }
+  return { light: theme.lightThemeColor, dark: theme.darkThemeColor, active: activeThemeColor(theme, safeMode) };
+}
+
 function setMetaContent(meta, content) {
   if (!meta) return null;
   meta.setAttribute('content', content);
@@ -211,15 +222,26 @@ function setMetaContent(meta, content) {
 
 function updatePwaSafeAreaColor(color) {
   document.documentElement.style.setProperty('--pwa-safe-area-bg', color);
+  document.documentElement.style.background = color;
   document.documentElement.style.backgroundColor = color;
 
   if (document.body) {
+    document.body.style.setProperty('--pwa-safe-area-bg', color);
+    document.body.style.background = color;
     document.body.style.backgroundColor = color;
   }
 
   const safeArea = document.getElementById('pwa-safe-area-bg');
   if (safeArea) {
     safeArea.style.backgroundColor = color;
+    safeArea.style.background = color;
+    safeArea.style.opacity = '0.999';
+    safeArea.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      safeArea.style.background = color;
+      safeArea.style.backgroundColor = color;
+      safeArea.style.opacity = '1';
+    });
   }
 }
 
@@ -228,12 +250,14 @@ function updateThemeMeta(theme, colorMode = selectedColorMode()) {
   const darkMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
   const activeMeta = document.querySelector('meta[name="theme-color"][data-app-theme-color]');
   const schemeMeta = document.querySelector('meta[name="color-scheme"]');
-  const activeColor = activeThemeColor(theme, colorMode);
-  setMetaContent(lightMeta, theme.lightThemeColor);
-  setMetaContent(darkMeta, theme.darkThemeColor);
-  setMetaContent(activeMeta, activeColor);
+  const statusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  const metaColors = themeMetaColors(theme, colorMode);
+  setMetaContent(lightMeta, metaColors.light);
+  setMetaContent(darkMeta, metaColors.dark);
+  setMetaContent(activeMeta, metaColors.active);
+  setMetaContent(statusMeta, 'black-translucent');
   if (schemeMeta) schemeMeta.setAttribute('content', colorMode === 'system' ? 'light dark' : colorMode);
-  updatePwaSafeAreaColor(activeColor);
+  updatePwaSafeAreaColor(metaColors.active);
 }
 
 function applyAppearance({ themeId = selectedThemeId(), colorMode = selectedColorMode() } = {}) {
