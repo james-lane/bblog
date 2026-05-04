@@ -8,11 +8,94 @@ const MILK_UNIT = 'ml';
 const WEIGHT_UNIT = 'g';
 const GRAMS_PER_OUNCE = 28.349523125;
 const OUNCES_PER_POUND = 16;
-const BABY_COLOURS = ['#007aff', '#ff6b00', '#34c759', '#ff2d55', '#af52de', '#5ac8fa'];
+const BABY_COLOURS = ['#0057d9', '#c2410c', '#087f5b', '#c2255c', '#7048e8', '#0b7285'];
 const SYNC_RETRY_DELAY_MS = 3000;
 const SYNC_FOREGROUND_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
 const INSTALL_DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const THEME_STORAGE_KEY = 'bblog-theme';
+const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
+const DEFAULT_THEME_ID = 'classic';
+const DEFAULT_COLOR_MODE = 'system';
+const COLOR_MODES = [
+  { id: 'system', name: 'System' },
+  { id: 'light', name: 'Light' },
+  { id: 'dark', name: 'Dark' },
+];
+const APP_THEMES = [
+  {
+    id: 'classic',
+    name: 'Neon',
+    tone: 'Electric blue',
+    lightThemeColor: '#eaf0ff',
+    darkThemeColor: '#070b18',
+    swatches: ['#eaf0ff', '#ffffff', '#2447ff', '#ff2e88'],
+    babyColours: {
+      light: ['#1247ff', '#d0007f', '#008566', '#c2410c', '#5b21b6', '#007f99'],
+      dark: ['#6aa8ff', '#ff66c4', '#46f0a6', '#ff9a4d', '#b98cff', '#4deaff'],
+    },
+  },
+  {
+    id: 'harbor',
+    name: 'Circuit',
+    tone: 'Cyan matrix',
+    lightThemeColor: '#e6fff8',
+    darkThemeColor: '#041313',
+    swatches: ['#e6fff8', '#ffffff', '#007a72', '#00b894'],
+    babyColours: {
+      light: ['#007a72', '#1d4ed8', '#be123c', '#9a5b00', '#6d28d9', '#13823d'],
+      dark: ['#53ffcd', '#84a9ff', '#ff6f9a', '#ffd166', '#c49bff', '#7ee36d'],
+    },
+  },
+  {
+    id: 'ember',
+    name: 'Pulse',
+    tone: 'Hot signal',
+    lightThemeColor: '#fff0e6',
+    darkThemeColor: '#16070a',
+    swatches: ['#fff0e6', '#fffaf4', '#c93400', '#ff3366'],
+    babyColours: {
+      light: ['#c93400', '#be123c', '#155bd4', '#087f5b', '#7c3aed', '#936100'],
+      dark: ['#ff8a4d', '#ff668f', '#85aaff', '#5ce0a6', '#c6a0ff', '#ffd166'],
+    },
+  },
+  {
+    id: 'meadow',
+    name: 'Lullaby',
+    tone: 'Pastel mint',
+    lightThemeColor: '#f1f8f2',
+    darkThemeColor: '#101811',
+    swatches: ['#f1f8f2', '#ffffff', '#4c8064', '#cfe8d6'],
+    babyColours: {
+      light: ['#3f7d5a', '#3f5bb5', '#a24a62', '#8c641a', '#147c8e', '#85459c'],
+      dark: ['#8ee0a2', '#93a9ff', '#f29db0', '#efc35a', '#75def2', '#d49af2'],
+    },
+  },
+  {
+    id: 'peony',
+    name: 'Sorbet',
+    tone: 'Pastel rose',
+    lightThemeColor: '#fff0f4',
+    darkThemeColor: '#1b1115',
+    swatches: ['#fff0f4', '#ffffff', '#965570', '#f0cad6'],
+    babyColours: {
+      light: ['#9a4b68', '#365faa', '#367d63', '#9a5d24', '#7946a5', '#147985'],
+      dark: ['#f0a0ba', '#99bcff', '#91deb2', '#edac68', '#d2a0f0', '#85d8e0'],
+    },
+  },
+  {
+    id: 'lilac',
+    name: 'Cloud',
+    tone: 'Pastel lilac',
+    lightThemeColor: '#f5f1fb',
+    darkThemeColor: '#15111d',
+    swatches: ['#f5f1fb', '#ffffff', '#7868a8', '#ddd1ef'],
+    babyColours: {
+      light: ['#714fb0', '#187f8a', '#657f35', '#9a5574', '#8c5d2d', '#415fae'],
+      dark: ['#c7adff', '#7ce0e8', '#c4dc78', '#e8a2bf', '#dbb365', '#9fb8ff'],
+    },
+  },
+];
 
 const formState = {
   user: null,
@@ -102,6 +185,170 @@ function rememberInstallDismissal() {
   } catch {
     /* ignore */
   }
+}
+
+function themeById(themeId) {
+  return APP_THEMES.find((theme) => theme.id === themeId) || APP_THEMES.find((theme) => theme.id === DEFAULT_THEME_ID);
+}
+
+function colorModeById(colorMode) {
+  return COLOR_MODES.find((mode) => mode.id === colorMode) || COLOR_MODES.find((mode) => mode.id === DEFAULT_COLOR_MODE);
+}
+
+function selectedThemeId() {
+  try {
+    return themeById(localStorage.getItem(THEME_STORAGE_KEY))?.id || DEFAULT_THEME_ID;
+  } catch {
+    return DEFAULT_THEME_ID;
+  }
+}
+
+function selectedColorMode() {
+  try {
+    return colorModeById(localStorage.getItem(COLOR_MODE_STORAGE_KEY))?.id || DEFAULT_COLOR_MODE;
+  } catch {
+    return DEFAULT_COLOR_MODE;
+  }
+}
+
+function currentColorMode() {
+  return colorModeById(document.documentElement.dataset.colorMode || selectedColorMode()).id;
+}
+
+function resolvedColorMode(colorMode = currentColorMode()) {
+  const safeMode = colorModeById(colorMode).id;
+  if (safeMode !== 'system') return safeMode;
+  return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function updateThemeMeta(theme, colorMode = selectedColorMode()) {
+  const lightMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
+  const darkMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
+  const activeMeta = document.querySelector('meta[name="theme-color"][data-app-theme-color]');
+  const schemeMeta = document.querySelector('meta[name="color-scheme"]');
+  if (lightMeta) lightMeta.setAttribute('content', theme.lightThemeColor);
+  if (darkMeta) darkMeta.setAttribute('content', theme.darkThemeColor);
+  if (activeMeta) activeMeta.setAttribute('content', resolvedColorMode(colorMode) === 'dark' ? theme.darkThemeColor : theme.lightThemeColor);
+  if (schemeMeta) schemeMeta.setAttribute('content', colorMode === 'system' ? 'light dark' : colorMode);
+}
+
+function applyAppearance({ themeId = selectedThemeId(), colorMode = selectedColorMode() } = {}) {
+  const theme = themeById(themeId);
+  const mode = colorModeById(colorMode);
+  document.documentElement.dataset.theme = theme.id;
+  document.documentElement.dataset.colorMode = mode.id;
+  updateThemeMeta(theme, mode.id);
+  return { themeId: theme.id, colorMode: mode.id };
+}
+
+function applyTheme(themeId = selectedThemeId()) {
+  return applyAppearance({ themeId, colorMode: selectedColorMode() }).themeId;
+}
+
+function saveThemeSelection(themeId) {
+  const safeThemeId = applyAppearance({ themeId, colorMode: selectedColorMode() }).themeId;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, safeThemeId);
+  } catch {
+    /* ignore */
+  }
+  return safeThemeId;
+}
+
+function saveColorModeSelection(colorMode) {
+  const safeColorMode = applyAppearance({ themeId: currentTheme().id, colorMode }).colorMode;
+  try {
+    localStorage.setItem(COLOR_MODE_STORAGE_KEY, safeColorMode);
+  } catch {
+    /* ignore */
+  }
+  return safeColorMode;
+}
+
+function currentTheme() {
+  return themeById(document.documentElement.dataset.theme || selectedThemeId());
+}
+
+function currentBabyColours() {
+  const palette = currentTheme().babyColours;
+  if (Array.isArray(palette)) return palette;
+  return palette?.[resolvedColorMode(currentColorMode())] || palette?.light || BABY_COLOURS;
+}
+
+function rerenderAfterAppearanceChange() {
+  if (data) {
+    renderAll();
+  } else {
+    renderColorModeOptions();
+    renderThemeOptions();
+  }
+}
+
+function renderColorModeOptions() {
+  const el = document.getElementById('color-mode-options');
+  if (!el) return;
+
+  const currentMode = currentColorMode();
+  el.innerHTML = COLOR_MODES.map(
+    (mode) => `
+      <button
+        type="button"
+        class="color-mode-option"
+        data-color-mode="${mode.id}"
+        role="radio"
+        aria-checked="${mode.id === currentMode ? 'true' : 'false'}"
+      >${escapeHtml(mode.name)}</button>
+    `,
+  ).join('');
+
+  el.querySelectorAll('.color-mode-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nextColorMode = saveColorModeSelection(btn.dataset.colorMode);
+      rerenderAfterAppearanceChange();
+      if (nextColorMode) showSettingsConfirmation();
+    });
+  });
+}
+
+function renderThemeOptions() {
+  const el = document.getElementById('theme-options');
+  if (!el) return;
+
+  const currentThemeId = themeById(document.documentElement.dataset.theme || selectedThemeId()).id;
+  el.innerHTML = APP_THEMES.map(
+    (theme) => `
+      <button
+        type="button"
+        class="theme-option"
+        data-theme-id="${theme.id}"
+        role="radio"
+        aria-checked="${theme.id === currentThemeId ? 'true' : 'false'}"
+        aria-label="${escapeHtml(theme.name)} theme"
+      >
+        <span class="theme-option-preview" aria-hidden="true">
+          ${theme.swatches.map((swatch) => `<span class="theme-swatch" style="--swatch:${swatch}"></span>`).join('')}
+        </span>
+        <span class="theme-option-copy">
+          <span class="theme-option-name">${escapeHtml(theme.name)}</span>
+          <span class="theme-option-tone">${escapeHtml(theme.tone)}</span>
+        </span>
+      </button>
+    `,
+  ).join('');
+
+  el.querySelectorAll('.theme-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nextThemeId = saveThemeSelection(btn.dataset.themeId);
+      rerenderAfterAppearanceChange();
+      if (nextThemeId) showSettingsConfirmation();
+    });
+  });
+}
+
+function handleSystemColorSchemeChange() {
+  if (selectedColorMode() !== 'system') return;
+  updateThemeMeta(currentTheme(), 'system');
+  if (data) renderAll();
 }
 
 function installSuggestionDetail() {
@@ -456,9 +703,10 @@ function users() {
 }
 
 function babies() {
+  const colours = currentBabyColours();
   return active(data?.babies || []).map((baby, index) => ({
     ...baby,
-    colour: BABY_COLOURS[index % BABY_COLOURS.length],
+    colour: colours[index % colours.length],
   }));
 }
 
@@ -489,6 +737,39 @@ function currentUnit() {
     return findMed(formState.medication)?.unit || 'ml';
   }
   return MILK_UNIT;
+}
+
+function hexToRgb(value) {
+  const hex = String(value || '').trim().replace(/^#/, '');
+  const expanded = hex.length === 3 ? hex.split('').map((ch) => ch + ch).join('') : hex;
+  if (!/^[0-9a-f]{6}$/i.test(expanded)) return null;
+  return {
+    r: parseInt(expanded.slice(0, 2), 16),
+    g: parseInt(expanded.slice(2, 4), 16),
+    b: parseInt(expanded.slice(4, 6), 16),
+  };
+}
+
+function relativeLuminance({ r, g, b }) {
+  const channel = (value) => {
+    const n = value / 255;
+    return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(left, right) {
+  const light = Math.max(relativeLuminance(left), relativeLuminance(right));
+  const dark = Math.min(relativeLuminance(left), relativeLuminance(right));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+function readableInkFor(hexColor) {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return '#ffffff';
+  const white = { r: 255, g: 255, b: 255 };
+  const ink = { r: 17, g: 24, b: 39 };
+  return contrastRatio(rgb, ink) >= contrastRatio(rgb, white) ? '#111827' : '#ffffff';
 }
 
 function recordStamp(item) {
@@ -1183,6 +1464,9 @@ function initWeightTrendChart(activeBabies) {
   maxWeight += weightPadding;
   if (minWeight === maxWeight) maxWeight = minWeight + 100;
 
+  const rootStyles = getComputedStyle(document.documentElement);
+  const chartGridColor = rootStyles.getPropertyValue('--chart-grid').trim() || 'rgba(142, 142, 147, 0.22)';
+  const chartTextColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
   const findModel = (babyId, timestamp, grams) =>
     pointModels.find((model) => model.baby.id === babyId && model.point.timestamp === timestamp && model.point.grams === grams);
 
@@ -1225,19 +1509,21 @@ function initWeightTrendChart(activeBabies) {
           min: minTime,
           max: maxTime,
           ticks: {
+            color: chartTextColor,
             maxTicksLimit: 5,
             callback: (value) => formatWeightTrendDate(value),
           },
-          grid: { color: 'rgba(142, 142, 147, 0.18)' },
+          grid: { color: chartGridColor },
         },
         y: {
           min: minWeight,
           max: maxWeight,
           ticks: {
+            color: chartTextColor,
             maxTicksLimit: 6,
             callback: (value) => formatWeightLbOz(value),
           },
-          grid: { color: 'rgba(142, 142, 147, 0.22)' },
+          grid: { color: chartGridColor },
         },
       },
       onClick: (event) => {
@@ -1278,6 +1564,10 @@ function renderSelButtons(containerId, items, stateKey, onChange, emptyText = ''
     btn.className = `sel-btn${formState[stateKey] === item.id ? ' selected' : ''}`;
     btn.dataset.id = item.id;
     btn.textContent = item.name || item.label;
+    if (item.colour) {
+      btn.style.setProperty('--baby-colour', item.colour);
+      btn.style.setProperty('--baby-ink', readableInkFor(item.colour));
+    }
     btn.addEventListener('click', () => {
       formState[stateKey] = item.id;
       renderSelButtons(containerId, items, stateKey, onChange);
@@ -1981,6 +2271,8 @@ function showSettingsConfirmation() {
 
 function renderSettings() {
   renderSetupGuide();
+  renderColorModeOptions();
+  renderThemeOptions();
   renderPersonCards('users');
   renderPersonCards('babies');
   renderMedCards();
@@ -2047,7 +2339,7 @@ function renderDashboard() {
       const avgText = avg != null ? `${avg} ml` : '—';
       const maxText = stats?.rollingFeeds ? `${Math.round(stats.rollingMax)} ml` : '—';
       return `
-      <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}">
+      <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour};--baby-ink:${readableInkFor(baby.colour)}">
         <div class="dash-live-info">
           <div class="dash-live-heading">
             <div class="dash-live-name">${escapeHtml(baby.name)}</div>
@@ -2377,6 +2669,13 @@ async function registerServiceWorker() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  applyAppearance();
+  const colorSchemeQuery = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+  if (colorSchemeQuery?.addEventListener) {
+    colorSchemeQuery.addEventListener('change', handleSystemColorSchemeChange);
+  } else if (colorSchemeQuery?.addListener) {
+    colorSchemeQuery.addListener(handleSystemColorSchemeChange);
+  }
   await registerServiceWorker();
   wireSetup();
   wireInstallSuggestion();
