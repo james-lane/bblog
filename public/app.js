@@ -146,6 +146,20 @@ function isIosLike() {
   return /iphone|ipad|ipod/i.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+function needsIosStandaloneStatusBarRefresh() {
+  return isIosLike() && isStandaloneDisplay();
+}
+
+let appearanceReloadTimer = null;
+
+function scheduleIosStandaloneAppearanceRefresh() {
+  if (!needsIosStandaloneStatusBarRefresh()) return;
+  if (appearanceReloadTimer) clearTimeout(appearanceReloadTimer);
+  appearanceReloadTimer = setTimeout(() => {
+    globalThis.location.reload();
+  }, 140);
+}
+
 function installDismissedRecently() {
   try {
     const dismissedAt = Number(localStorage.getItem(INSTALL_DISMISSED_KEY));
@@ -331,9 +345,13 @@ function renderColorModeOptions() {
 
   el.querySelectorAll('.color-mode-option').forEach((btn) => {
     btn.addEventListener('click', () => {
+      const previousColorMode = currentColorMode();
       const nextColorMode = saveColorModeSelection(btn.dataset.colorMode);
       rerenderAfterAppearanceChange();
-      if (nextColorMode) showSettingsConfirmation();
+      if (nextColorMode) {
+        showSettingsConfirmation();
+        if (nextColorMode !== previousColorMode) scheduleIosStandaloneAppearanceRefresh();
+      }
     });
   });
 }
@@ -366,9 +384,13 @@ function renderThemeOptions() {
 
   el.querySelectorAll('.theme-option').forEach((btn) => {
     btn.addEventListener('click', () => {
+      const previousThemeId = currentTheme().id;
       const nextThemeId = saveThemeSelection(btn.dataset.themeId);
       rerenderAfterAppearanceChange();
-      if (nextThemeId) showSettingsConfirmation();
+      if (nextThemeId) {
+        showSettingsConfirmation();
+        if (nextThemeId !== previousThemeId) scheduleIosStandaloneAppearanceRefresh();
+      }
     });
   });
 }
