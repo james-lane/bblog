@@ -271,16 +271,16 @@ html {
 
 .pwa-safe-area-bg {
   position: fixed;
-  top: 0;
+  top: -96px;
   left: 0;
   right: 0;
-  height: calc(env(safe-area-inset-top, 0px) + 1px);
+  height: calc(96px + env(safe-area-inset-top, 0px) + 2px);
   background: var(--pwa-safe-area-bg, var(--bg));
   background-color: var(--pwa-safe-area-bg, var(--bg));
   pointer-events: none;
   transform: translateZ(0);
   will-change: background-color, opacity;
-  z-index: 30;
+  z-index: 1000;
 }
 
 body {
