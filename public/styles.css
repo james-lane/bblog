@@ -454,6 +454,11 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 button, input, textarea, select { font-family: inherit; }
 
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
 body {
   position: fixed;
   inset: 0;

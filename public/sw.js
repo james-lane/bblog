@@ -1,10 +1,10 @@
-const CACHE_NAME = 'bblog-v35';
+const CACHE_NAME = 'bblog-v36';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260504-baby-contrast',
+  '/styles.css?v=20260504-pwa-status',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260504-baby-contrast',
+  '/app.js?v=20260504-pwa-status',
   '/manifest.webmanifest',
   '/icon.svg',
 ];
