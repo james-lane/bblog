@@ -7,29 +7,50 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="bblog" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#eaf0ff" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#070b18" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#eaf0ff" data-app-theme-color />
+  <meta name="theme-color" content="#fbfefb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#231a16" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#fbfefb" data-app-theme-color />
   <title>bblog</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
   <script>
     (() => {
       try {
-        const themes = ['classic', 'meadow', 'harbor', 'peony', 'ember', 'lilac'];
+        const themes = ['linen', 'playroom', 'sugarplum', 'citrus', 'aurora', 'carnival', 'lagoon', 'midnight'];
         const colorModes = ['system', 'light', 'dark'];
+        const themeColors = {
+          linen: ['#fbfefb', '#231a16'],
+          playroom: ['#f9f9f9', '#101724'],
+          sugarplum: ['#f4f4ed', '#171225'],
+          citrus: ['#eaf2e3', '#12211f'],
+          aurora: ['#f7efff', '#171126'],
+          carnival: ['#fff8e6', '#130b25'],
+          lagoon: ['#f7fbf9', '#073b4c'],
+          midnight: ['#f4fffd', '#0b132b'],
+        };
         const theme = localStorage.getItem('bblog-theme');
         const colorMode = localStorage.getItem('bblog-color-mode');
-        if (themes.includes(theme)) document.documentElement.dataset.theme = theme;
-        if (colorModes.includes(colorMode)) document.documentElement.dataset.colorMode = colorMode;
+        const safeTheme = themes.includes(theme) ? theme : 'linen';
+        const safeColorMode = colorModes.includes(colorMode) ? colorMode : 'system';
+        const prefersDark = globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
+        const resolvedMode = safeColorMode === 'system' && prefersDark ? 'dark' : safeColorMode;
+        const [lightThemeColor, darkThemeColor] = themeColors[safeTheme];
+        const activeThemeColor = resolvedMode === 'dark' ? darkThemeColor : lightThemeColor;
+        document.documentElement.dataset.theme = safeTheme;
+        document.documentElement.dataset.colorMode = safeColorMode;
+        document.documentElement.style.setProperty('--pwa-safe-area-bg', activeThemeColor);
+        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]')?.setAttribute('content', lightThemeColor);
+        document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]')?.setAttribute('content', darkThemeColor);
+        document.querySelector('meta[name="theme-color"][data-app-theme-color]')?.setAttribute('content', activeThemeColor);
       } catch {
         /* ignore */
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260504-pwa-status" />
+  <link rel="stylesheet" href="/styles.css?v=20260504-ios-palettes" />
 </head>
 <body>
+  <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
 
   <div id="offline-banner" class="offline-banner hidden">
     Saved here. Cloud sync will resume when this device is back online.
@@ -310,6 +331,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260504-pwa-status"></script>
+  <script src="/app.js?v=20260504-ios-palettes"></script>
 </body>
 </html>

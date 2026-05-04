@@ -15,7 +15,7 @@ const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
 const INSTALL_DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const THEME_STORAGE_KEY = 'bblog-theme';
 const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
-const DEFAULT_THEME_ID = 'classic';
+const DEFAULT_THEME_ID = 'linen';
 const DEFAULT_COLOR_MODE = 'system';
 const COLOR_MODES = [
   { id: 'system', name: 'System' },
@@ -24,75 +24,99 @@ const COLOR_MODES = [
 ];
 const APP_THEMES = [
   {
-    id: 'classic',
-    name: 'Neon',
-    tone: 'Electric blue',
-    lightThemeColor: '#eaf0ff',
-    darkThemeColor: '#070b18',
-    swatches: ['#eaf0ff', '#ffffff', '#2447ff', '#ff2e88'],
+    id: 'linen',
+    name: 'Linen',
+    tone: 'Warm porcelain',
+    lightThemeColor: '#fbfefb',
+    darkThemeColor: '#231a16',
+    swatches: ['#d0b8ac', '#f3d8c7', '#efe5dc', '#fbfefb', '#ffffff'],
     babyColours: {
-      light: ['#1247ff', '#d0007f', '#008566', '#c2410c', '#5b21b6', '#007f99'],
-      dark: ['#6aa8ff', '#ff66c4', '#46f0a6', '#ff9a4d', '#b98cff', '#4deaff'],
+      light: ['#8e6254', '#b7795f', '#7c6f63', '#3c7c73', '#986b8f', '#9a6a44'],
+      dark: ['#f3d8c7', '#d0b8ac', '#fbfefb', '#a9d8d0', '#f0aebf', '#e6c073'],
     },
   },
   {
-    id: 'harbor',
-    name: 'Circuit',
-    tone: 'Cyan matrix',
-    lightThemeColor: '#e6fff8',
-    darkThemeColor: '#041313',
-    swatches: ['#e6fff8', '#ffffff', '#007a72', '#00b894'],
+    id: 'playroom',
+    name: 'Playroom',
+    tone: 'Sky candy',
+    lightThemeColor: '#f9f9f9',
+    darkThemeColor: '#101724',
+    swatches: ['#5aa9e6', '#7fc8f8', '#f9f9f9', '#ffe45e', '#ff6392'],
     babyColours: {
-      light: ['#007a72', '#1d4ed8', '#be123c', '#9a5b00', '#6d28d9', '#13823d'],
-      dark: ['#53ffcd', '#84a9ff', '#ff6f9a', '#ffd166', '#c49bff', '#7ee36d'],
+      light: ['#2384cf', '#cc306e', '#9f8700', '#0f7fb8', '#bf4776', '#4b8fc8'],
+      dark: ['#7fc8f8', '#ff6392', '#ffe45e', '#5aa9e6', '#f9f9f9', '#ffb3cf'],
     },
   },
   {
-    id: 'ember',
-    name: 'Pulse',
-    tone: 'Hot signal',
-    lightThemeColor: '#fff0e6',
-    darkThemeColor: '#16070a',
-    swatches: ['#fff0e6', '#fffaf4', '#c93400', '#ff3366'],
+    id: 'sugarplum',
+    name: 'Sugarplum',
+    tone: 'Lilac prism',
+    lightThemeColor: '#f4f4ed',
+    darkThemeColor: '#171225',
+    swatches: ['#f7aef8', '#b388eb', '#8093f1', '#72ddf7', '#f4f4ed'],
     babyColours: {
-      light: ['#c93400', '#be123c', '#155bd4', '#087f5b', '#7c3aed', '#936100'],
-      dark: ['#ff8a4d', '#ff668f', '#85aaff', '#5ce0a6', '#c6a0ff', '#ffd166'],
+      light: ['#aa54b3', '#6f63c8', '#4d64d8', '#1598b5', '#8f4e79', '#5f7c2e'],
+      dark: ['#f7aef8', '#b388eb', '#8093f1', '#72ddf7', '#f4f4ed', '#f0ca7a'],
     },
   },
   {
-    id: 'meadow',
-    name: 'Lullaby',
-    tone: 'Pastel mint',
-    lightThemeColor: '#f1f8f2',
-    darkThemeColor: '#101811',
-    swatches: ['#f1f8f2', '#ffffff', '#4c8064', '#cfe8d6'],
+    id: 'citrus',
+    name: 'Citrus',
+    tone: 'Mint spark',
+    lightThemeColor: '#eaf2e3',
+    darkThemeColor: '#12211f',
+    swatches: ['#eaf2e3', '#61e8e1', '#f25757', '#f2e863', '#f2cd60'],
     babyColours: {
-      light: ['#3f7d5a', '#3f5bb5', '#a24a62', '#8c641a', '#147c8e', '#85459c'],
-      dark: ['#8ee0a2', '#93a9ff', '#f29db0', '#efc35a', '#75def2', '#d49af2'],
+      light: ['#2a9d91', '#d83f3f', '#b4a000', '#b58416', '#287c70', '#9a4d62'],
+      dark: ['#61e8e1', '#ff8f8f', '#f2e863', '#f2cd60', '#eaf2e3', '#a0f0c5'],
     },
   },
   {
-    id: 'peony',
-    name: 'Sorbet',
-    tone: 'Pastel rose',
-    lightThemeColor: '#fff0f4',
-    darkThemeColor: '#1b1115',
-    swatches: ['#fff0f4', '#ffffff', '#965570', '#f0cad6'],
+    id: 'aurora',
+    name: 'Aurora',
+    tone: 'Violet seafoam',
+    lightThemeColor: '#f7efff',
+    darkThemeColor: '#171126',
+    swatches: ['#ebc2ff', '#a873e8', '#5d7bd5', '#56d1dc', '#c2ffee'],
     babyColours: {
-      light: ['#9a4b68', '#365faa', '#367d63', '#9a5d24', '#7946a5', '#147985'],
-      dark: ['#f0a0ba', '#99bcff', '#91deb2', '#edac68', '#d2a0f0', '#85d8e0'],
+      light: ['#5d7bd5', '#8b55d0', '#249aa5', '#7d62bf', '#339d87', '#b34d86'],
+      dark: ['#ebc2ff', '#a873e8', '#56d1dc', '#c2ffee', '#86a4ff', '#ff9fc1'],
     },
   },
   {
-    id: 'lilac',
-    name: 'Cloud',
-    tone: 'Pastel lilac',
-    lightThemeColor: '#f5f1fb',
-    darkThemeColor: '#15111d',
-    swatches: ['#f5f1fb', '#ffffff', '#7868a8', '#ddd1ef'],
+    id: 'carnival',
+    name: 'Carnival',
+    tone: 'Neon burst',
+    lightThemeColor: '#fff8e6',
+    darkThemeColor: '#130b25',
+    swatches: ['#ffbe0b', '#fb5607', '#ff006e', '#8338ec', '#3a86ff'],
     babyColours: {
-      light: ['#714fb0', '#187f8a', '#657f35', '#9a5574', '#8c5d2d', '#415fae'],
-      dark: ['#c7adff', '#7ce0e8', '#c4dc78', '#e8a2bf', '#dbb365', '#9fb8ff'],
+      light: ['#8338ec', '#ff006e', '#3a86ff', '#fb5607', '#b88400', '#0b7f86'],
+      dark: ['#ffbe0b', '#ff6ca7', '#3a86ff', '#fb5607', '#b891ff', '#70e2ff'],
+    },
+  },
+  {
+    id: 'lagoon',
+    name: 'Lagoon',
+    tone: 'Berry tide',
+    lightThemeColor: '#f7fbf9',
+    darkThemeColor: '#073b4c',
+    swatches: ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#073b4c'],
+    babyColours: {
+      light: ['#118ab2', '#ef476f', '#06a77d', '#b88a00', '#073b4c', '#8b4e9b'],
+      dark: ['#06d6a0', '#ffd166', '#ef476f', '#5ec8e5', '#f2fffb', '#ff99b1'],
+    },
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    tone: 'Deep teal',
+    lightThemeColor: '#f4fffd',
+    darkThemeColor: '#0b132b',
+    swatches: ['#0b132b', '#1c2541', '#3a506b', '#5bc0be', '#6fffe9'],
+    babyColours: {
+      light: ['#3a506b', '#238c8a', '#1c2541', '#0f766e', '#5d6fa3', '#b23a5a'],
+      dark: ['#5bc0be', '#6fffe9', '#8aa4ff', '#f2fffb', '#7bd0ff', '#ff91a6'],
     },
   },
 ];
@@ -221,15 +245,43 @@ function resolvedColorMode(colorMode = currentColorMode()) {
   return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+function activeThemeColor(theme, colorMode = selectedColorMode()) {
+  return resolvedColorMode(colorMode) === 'dark' ? theme.darkThemeColor : theme.lightThemeColor;
+}
+
+function setMetaContent(meta, content) {
+  if (!meta) return null;
+  meta.setAttribute('content', content);
+  const freshMeta = meta.cloneNode(true);
+  meta.replaceWith(freshMeta);
+  return freshMeta;
+}
+
+function updatePwaSafeAreaColor(color) {
+  document.documentElement.style.setProperty('--pwa-safe-area-bg', color);
+  document.documentElement.style.backgroundColor = color;
+
+  if (document.body) {
+    document.body.style.backgroundColor = color;
+  }
+
+  const safeArea = document.getElementById('pwa-safe-area-bg');
+  if (safeArea) {
+    safeArea.style.backgroundColor = color;
+  }
+}
+
 function updateThemeMeta(theme, colorMode = selectedColorMode()) {
   const lightMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
   const darkMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
   const activeMeta = document.querySelector('meta[name="theme-color"][data-app-theme-color]');
   const schemeMeta = document.querySelector('meta[name="color-scheme"]');
-  if (lightMeta) lightMeta.setAttribute('content', theme.lightThemeColor);
-  if (darkMeta) darkMeta.setAttribute('content', theme.darkThemeColor);
-  if (activeMeta) activeMeta.setAttribute('content', resolvedColorMode(colorMode) === 'dark' ? theme.darkThemeColor : theme.lightThemeColor);
+  const activeColor = activeThemeColor(theme, colorMode);
+  setMetaContent(lightMeta, theme.lightThemeColor);
+  setMetaContent(darkMeta, theme.darkThemeColor);
+  setMetaContent(activeMeta, activeColor);
   if (schemeMeta) schemeMeta.setAttribute('content', colorMode === 'system' ? 'light dark' : colorMode);
+  updatePwaSafeAreaColor(activeColor);
 }
 
 function applyAppearance({ themeId = selectedThemeId(), colorMode = selectedColorMode() } = {}) {
