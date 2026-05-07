@@ -212,12 +212,20 @@ function themeMetaColors(theme, colorMode = selectedColorMode()) {
   return { light: theme.lightThemeColor, dark: theme.darkThemeColor, active: activeThemeColor(theme, safeMode) };
 }
 
-function setMetaContent(meta, content) {
-  if (!meta) return null;
-  meta.setAttribute('content', content);
-  const freshMeta = meta.cloneNode(true);
-  meta.replaceWith(freshMeta);
-  return freshMeta;
+function reinsertHeadMeta(metaUpdates) {
+  const freshMetas = metaUpdates
+    .filter(({ meta }) => meta)
+    .map(({ meta, content }) => {
+      const freshMeta = meta.cloneNode(true);
+      freshMeta.setAttribute('content', content);
+      return { oldMeta: meta, freshMeta };
+    });
+
+  if (!freshMetas.length) return;
+
+  freshMetas.forEach(({ oldMeta }) => oldMeta.remove());
+  void document.head.offsetHeight;
+  freshMetas.forEach(({ freshMeta }) => document.head.appendChild(freshMeta));
 }
 
 function updatePwaSafeAreaColor(color) {
@@ -252,10 +260,12 @@ function updateThemeMeta(theme, colorMode = selectedColorMode()) {
   const schemeMeta = document.querySelector('meta[name="color-scheme"]');
   const statusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   const metaColors = themeMetaColors(theme, colorMode);
-  setMetaContent(lightMeta, metaColors.light);
-  setMetaContent(darkMeta, metaColors.dark);
-  setMetaContent(activeMeta, metaColors.active);
-  setMetaContent(statusMeta, 'black-translucent');
+  reinsertHeadMeta([
+    { meta: lightMeta, content: metaColors.light },
+    { meta: darkMeta, content: metaColors.dark },
+    { meta: activeMeta, content: metaColors.active },
+    { meta: statusMeta, content: 'black-translucent' },
+  ]);
   if (schemeMeta) schemeMeta.setAttribute('content', colorMode === 'system' ? 'light dark' : colorMode);
   updatePwaSafeAreaColor(metaColors.active);
 }

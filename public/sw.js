@@ -1,10 +1,10 @@
-const CACHE_NAME = 'bblog-v44';
+const CACHE_NAME = 'bblog-v45';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260504-ios-statusbar-overlay',
+  '/styles.css?v=20260507-ios-meta-reinsert',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260504-ios-statusbar-overlay',
+  '/app.js?v=20260507-ios-meta-reinsert',
   '/manifest.webmanifest',
   '/icon.svg',
 ];
