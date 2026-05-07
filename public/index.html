@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260507-ios-meta-reinsert" />
+  <link rel="stylesheet" href="/styles.css?v=20260507-who-growth-month-zoom" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -263,11 +263,19 @@
         <button class="settings-add-btn" data-add-list="babies">+ Add baby</button>
       </div>
 
+      <div class="settings-section">
+        <h2>Growth chart</h2>
+        <div id="growth-chart-settings" class="growth-chart-settings"></div>
+      </div>
+
       <div id="person-form" class="med-form hidden">
         <h3 id="person-form-title" class="med-form-title">New item</h3>
         <div class="med-form-fields">
           <label class="med-form-label">Name
             <input id="person-form-name" class="med-form-input" type="text" placeholder="Name" autocomplete="off" />
+          </label>
+          <label id="person-form-birthdate-label" class="med-form-label hidden">Birth date
+            <input id="person-form-birthdate" class="med-form-input" type="date" autocomplete="off" />
           </label>
         </div>
         <div class="form-actions" style="margin-top:12px;">
@@ -330,6 +338,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260507-ios-meta-reinsert"></script>
+  <script src="/app.js?v=20260507-who-growth-month-zoom"></script>
 </body>
 </html>

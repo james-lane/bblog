@@ -15,13 +15,89 @@ const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
 const INSTALL_DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const THEME_STORAGE_KEY = 'bblog-theme';
 const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
+const WEIGHT_GROWTH_SEX_STORAGE_KEY = 'bblog-weight-growth-sex';
+const WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY = 'bblog-weight-growth-percentiles';
 const DEFAULT_THEME_ID = 'playroom';
 const DEFAULT_COLOR_MODE = 'system';
+const DEFAULT_WEIGHT_GROWTH_SEX = 'boys';
+const DAYS_PER_MONTH = 365.2425 / 12;
+const WEIGHT_GROWTH_AGE_MIN = 0;
+const WEIGHT_GROWTH_AGE_MAX = 24;
+const WEIGHT_GROWTH_VIEW_MONTHS = [3, 6, 12, 24];
 const COLOR_MODES = [
   { id: 'system', name: 'System' },
   { id: 'light', name: 'Light' },
   { id: 'dark', name: 'Dark' },
 ];
+const WEIGHT_GROWTH_SEXES = [
+  { id: 'boys', name: 'Boys' },
+  { id: 'girls', name: 'Girls' },
+];
+const WHO_WEIGHT_PERCENTILES = [
+  { key: 'p3', name: '3rd', z: -1.881 },
+  { key: 'p15', name: '15th', z: -1.036 },
+  { key: 'p50', name: '50th', z: 0 },
+  { key: 'p85', name: '85th', z: 1.036 },
+  { key: 'p97', name: '97th', z: 1.881 },
+];
+const DEFAULT_WEIGHT_GROWTH_PERCENTILES = WHO_WEIGHT_PERCENTILES.map((percentile) => percentile.key);
+// Source: WHO Child Growth Standards / CDC WHO LMS weight-for-age data, birth to 24 months.
+const WHO_WEIGHT_FOR_AGE_LMS = {
+  boys: [
+    [0, 0.3487, 3.3464, 0.14602],
+    [1, 0.2297, 4.4709, 0.13395],
+    [2, 0.197, 5.5675, 0.12385],
+    [3, 0.1738, 6.3762, 0.11727],
+    [4, 0.1553, 7.0023, 0.11316],
+    [5, 0.1395, 7.5105, 0.1108],
+    [6, 0.1257, 7.934, 0.10958],
+    [7, 0.1134, 8.297, 0.10902],
+    [8, 0.1021, 8.6151, 0.10882],
+    [9, 0.0917, 8.9014, 0.10881],
+    [10, 0.082, 9.1649, 0.10891],
+    [11, 0.073, 9.4122, 0.10906],
+    [12, 0.0644, 9.6479, 0.10925],
+    [13, 0.0563, 9.8749, 0.10949],
+    [14, 0.0487, 10.0953, 0.10976],
+    [15, 0.0413, 10.3108, 0.11007],
+    [16, 0.0343, 10.5228, 0.11041],
+    [17, 0.0275, 10.7319, 0.11079],
+    [18, 0.0211, 10.9385, 0.11119],
+    [19, 0.0148, 11.143, 0.11164],
+    [20, 0.0087, 11.3462, 0.11211],
+    [21, 0.0029, 11.5486, 0.11261],
+    [22, -0.0028, 11.7504, 0.11314],
+    [23, -0.0083, 11.9514, 0.11369],
+    [24, -0.0137, 12.1515, 0.11426],
+  ],
+  girls: [
+    [0, 0.3809, 3.2322, 0.14171],
+    [1, 0.1714, 4.1873, 0.13724],
+    [2, 0.0962, 5.1282, 0.13],
+    [3, 0.0402, 5.8458, 0.12619],
+    [4, -0.005, 6.4237, 0.12402],
+    [5, -0.043, 6.8985, 0.12274],
+    [6, -0.0756, 7.297, 0.12204],
+    [7, -0.1039, 7.6422, 0.12178],
+    [8, -0.1288, 7.9487, 0.12181],
+    [9, -0.1507, 8.2254, 0.12199],
+    [10, -0.17, 8.48, 0.12223],
+    [11, -0.1872, 8.7192, 0.12247],
+    [12, -0.2024, 8.9481, 0.12268],
+    [13, -0.2158, 9.1699, 0.12283],
+    [14, -0.2278, 9.387, 0.12294],
+    [15, -0.2384, 9.6008, 0.12299],
+    [16, -0.2478, 9.8124, 0.12303],
+    [17, -0.2562, 10.0226, 0.12306],
+    [18, -0.2637, 10.2315, 0.12309],
+    [19, -0.2703, 10.4393, 0.12315],
+    [20, -0.2762, 10.6464, 0.12323],
+    [21, -0.2815, 10.8534, 0.12335],
+    [22, -0.2862, 11.0608, 0.1235],
+    [23, -0.2903, 11.2688, 0.12369],
+    [24, -0.2941, 11.4775, 0.1239],
+  ],
+};
 const APP_THEMES = [
   {
     id: 'playroom',
@@ -94,6 +170,9 @@ let _dashOffset = 0;
 let _medEditId = null;
 let _personEdit = null;
 let _selectedWeightPointKey = null;
+let _weightGrowthSex = selectedWeightGrowthSex();
+let _weightGrowthPercentiles = selectedWeightGrowthPercentiles();
+let _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MAX };
 let weightTrendChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
@@ -171,6 +250,10 @@ function colorModeById(colorMode) {
   return COLOR_MODES.find((mode) => mode.id === colorMode) || COLOR_MODES.find((mode) => mode.id === DEFAULT_COLOR_MODE);
 }
 
+function weightGrowthSexById(sex) {
+  return WEIGHT_GROWTH_SEXES.find((item) => item.id === sex) || WEIGHT_GROWTH_SEXES.find((item) => item.id === DEFAULT_WEIGHT_GROWTH_SEX);
+}
+
 function selectedThemeId() {
   try {
     return themeById(localStorage.getItem(THEME_STORAGE_KEY))?.id || DEFAULT_THEME_ID;
@@ -185,6 +268,52 @@ function selectedColorMode() {
   } catch {
     return DEFAULT_COLOR_MODE;
   }
+}
+
+function selectedWeightGrowthSex() {
+  try {
+    return weightGrowthSexById(localStorage.getItem(WEIGHT_GROWTH_SEX_STORAGE_KEY))?.id || DEFAULT_WEIGHT_GROWTH_SEX;
+  } catch {
+    return DEFAULT_WEIGHT_GROWTH_SEX;
+  }
+}
+
+function weightGrowthPercentileByKey(key) {
+  return WHO_WEIGHT_PERCENTILES.find((percentile) => percentile.key === key);
+}
+
+function normalizeWeightGrowthPercentiles(keys) {
+  const source = Array.isArray(keys) ? keys : [];
+  const selected = source.filter((key, index) => weightGrowthPercentileByKey(key) && source.indexOf(key) === index);
+  return selected.length ? selected : [...DEFAULT_WEIGHT_GROWTH_PERCENTILES];
+}
+
+function selectedWeightGrowthPercentiles() {
+  try {
+    return normalizeWeightGrowthPercentiles(JSON.parse(localStorage.getItem(WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY) || '[]'));
+  } catch {
+    return [...DEFAULT_WEIGHT_GROWTH_PERCENTILES];
+  }
+}
+
+function saveWeightGrowthSex(sex) {
+  _weightGrowthSex = weightGrowthSexById(sex).id;
+  try {
+    localStorage.setItem(WEIGHT_GROWTH_SEX_STORAGE_KEY, _weightGrowthSex);
+  } catch {
+    /* ignore */
+  }
+  return _weightGrowthSex;
+}
+
+function saveWeightGrowthPercentiles(keys) {
+  _weightGrowthPercentiles = normalizeWeightGrowthPercentiles(keys);
+  try {
+    localStorage.setItem(WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY, JSON.stringify(_weightGrowthPercentiles));
+  } catch {
+    /* ignore */
+  }
+  return _weightGrowthPercentiles;
 }
 
 function currentColorMode() {
@@ -624,14 +753,15 @@ function buildDemoData() {
   const now = Date.now();
   const stamp = nowIso();
   const hoursAgo = (hours) => new Date(now - hours * 3600000).toISOString();
+  const daysAgoDate = (days) => new Date(now - days * 86400000).toISOString().slice(0, 10);
 
   return normalizeData({
     schemaVersion: 1,
     meta: { createdAt: stamp, updatedAt: stamp },
     users: [{ id: 'demo_parent', name: 'Demo Parent', createdAt: stamp, updatedAt: stamp }],
     babies: [
-      { id: 'demo_ava', name: 'Ava', createdAt: stamp, updatedAt: stamp },
-      { id: 'demo_luca', name: 'Luca', createdAt: stamp, updatedAt: stamp },
+      { id: 'demo_ava', name: 'Ava', birthDate: daysAgoDate(5), createdAt: stamp, updatedAt: stamp },
+      { id: 'demo_luca', name: 'Luca', birthDate: daysAgoDate(6), createdAt: stamp, updatedAt: stamp },
     ],
     medications: [],
     entries: [
@@ -662,6 +792,24 @@ function normalizeRecordList(records, mapper) {
     });
 }
 
+function normalizeDateOnly(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function dateOnlyUtcMs(value) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return null;
+  const [year, month, day] = normalized.split('-').map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
 function normalizeData(value) {
   const stamp = nowIso();
   const source = value && typeof value === 'object' ? value : {};
@@ -681,6 +829,7 @@ function normalizeData(value) {
     babies: normalizeRecordList(source.babies, (item) => ({
       id: item.id,
       name: String(item.name || item.label || '').trim() || 'Baby',
+      birthDate: normalizeDateOnly(item.birthDate || item.dateOfBirth || item.dob),
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       deletedAt: item.deletedAt || null,
@@ -1322,8 +1471,96 @@ function formatWeightDate(isoString) {
   return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
-function formatWeightTrendDate(timestamp) {
-  return new Date(timestamp).toLocaleDateString([], { day: 'numeric', month: 'short' });
+function formatBabyBirthDate(value) {
+  const ms = dateOnlyUtcMs(value);
+  if (ms == null) return '';
+  return new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+function ageMonthsAt(timestamp, birthDate) {
+  const birthMs = dateOnlyUtcMs(birthDate);
+  const timestampMs = new Date(timestamp).getTime();
+  if (birthMs == null || !Number.isFinite(timestampMs)) return null;
+  return (timestampMs - birthMs) / 86400000 / DAYS_PER_MONTH;
+}
+
+function formatGrowthAge(ageMonths) {
+  if (!Number.isFinite(ageMonths)) return '';
+  if (ageMonths < 1) {
+    const days = Math.max(0, Math.round(ageMonths * DAYS_PER_MONTH));
+    return `${days}d`;
+  }
+  const rounded = Math.round(ageMonths * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}m`;
+}
+
+function roundGrowthMonth(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function formatGrowthMonth(value) {
+  const rounded = roundGrowthMonth(value);
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}m`;
+}
+
+function normalizeWeightGrowthView(view = _weightGrowthView) {
+  const max = Number(view?.max);
+  const nextMax = Number.isFinite(max)
+    ? WEIGHT_GROWTH_VIEW_MONTHS.reduce((closest, months) => (Math.abs(months - max) < Math.abs(closest - max) ? months : closest), WEIGHT_GROWTH_AGE_MAX)
+    : WEIGHT_GROWTH_AGE_MAX;
+  return { min: WEIGHT_GROWTH_AGE_MIN, max: nextMax };
+}
+
+function resetWeightGrowthView() {
+  _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MAX };
+}
+
+function setWeightGrowthView(view) {
+  _weightGrowthView = normalizeWeightGrowthView(view);
+  return _weightGrowthView;
+}
+
+function weightGrowthViewIsFull(view = _weightGrowthView) {
+  const normalized = normalizeWeightGrowthView(view);
+  return normalized.min <= WEIGHT_GROWTH_AGE_MIN && normalized.max >= WEIGHT_GROWTH_AGE_MAX;
+}
+
+function weightGrowthViewIndex(view = _weightGrowthView) {
+  const normalized = normalizeWeightGrowthView(view);
+  return WEIGHT_GROWTH_VIEW_MONTHS.indexOf(normalized.max);
+}
+
+function zoomWeightGrowthView(direction) {
+  const currentIndex = weightGrowthViewIndex();
+  const nextIndex = direction === 'in'
+    ? Math.max(0, currentIndex - 1)
+    : Math.min(WEIGHT_GROWTH_VIEW_MONTHS.length - 1, currentIndex + 1);
+  setWeightGrowthView({ min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_VIEW_MONTHS[nextIndex] });
+}
+
+function weightGrowthViewLabel() {
+  const view = normalizeWeightGrowthView();
+  return `${formatGrowthMonth(view.min)}-${formatGrowthMonth(view.max)}`;
+}
+
+function weightGrowthTickStep() {
+  const view = normalizeWeightGrowthView();
+  const windowMonths = view.max - view.min;
+  if (windowMonths <= 3) return 0.5;
+  if (windowMonths <= 6) return 1;
+  if (windowMonths <= 16) return 2;
+  return 3;
+}
+
+function weightGrowthZoomState() {
+  const view = normalizeWeightGrowthView();
+  const currentIndex = weightGrowthViewIndex(view);
+  return {
+    view,
+    canZoomIn: currentIndex > 0,
+    canZoomOut: currentIndex < WEIGHT_GROWTH_VIEW_MONTHS.length - 1,
+    isFull: weightGrowthViewIsFull(view),
+  };
 }
 
 function latestWeightsByBaby() {
@@ -1341,14 +1578,15 @@ function latestWeightsByBaby() {
 }
 
 function weightTrendByBaby(activeBabies) {
-  const babyIds = new Set(activeBabies.map((baby) => baby.id));
+  const babyMap = new Map(activeBabies.map((baby) => [baby.id, baby]));
   const byBaby = Object.fromEntries(activeBabies.map((baby) => [baby.id, []]));
   for (const e of entries()) {
-    if (e.type !== 'weight' || !babyIds.has(e.baby)) continue;
+    const baby = babyMap.get(e.baby);
+    if (e.type !== 'weight' || !baby) continue;
     const grams = weightGrams(e);
     const timestamp = new Date(e.timestamp).getTime();
     if (!grams || !Number.isFinite(timestamp)) continue;
-    byBaby[e.baby].push({ timestamp, grams });
+    byBaby[e.baby].push({ timestamp, grams, ageMonths: ageMonthsAt(timestamp, baby.birthDate) });
   }
   for (const points of Object.values(byBaby)) {
     points.sort((a, b) => a.timestamp - b.timestamp);
@@ -1400,13 +1638,32 @@ function milkLiveStats(now = Date.now()) {
 
 function weightTrendModel(activeBabies) {
   const seriesByBaby = weightTrendByBaby(activeBabies);
-  const series = activeBabies
+  const loggedSeries = activeBabies
     .map((baby) => ({ baby, points: seriesByBaby[baby.id] || [] }))
     .filter(({ points }) => points.length);
+  let missingAgeCount = 0;
+  let outsideRangeCount = 0;
+  const series = loggedSeries
+    .map(({ baby, points }) => {
+      const plottable = points.filter((point) => {
+        if (!Number.isFinite(point.ageMonths)) {
+          missingAgeCount += 1;
+          return false;
+        }
+        if (point.ageMonths < 0 || point.ageMonths > 24) {
+          outsideRangeCount += 1;
+          return false;
+        }
+        return true;
+      });
+      return { baby, points: plottable, loggedPoints: points };
+    })
+    .filter(({ points }) => points.length);
   const allPoints = series.flatMap(({ points }) => points);
-  const pointModels = series.flatMap(({ baby, points }) =>
-    points.map((point, index) => {
-      const previous = points[index - 1];
+  const pointModels = series.flatMap(({ baby, points, loggedPoints }) =>
+    points.map((point) => {
+      const loggedIndex = loggedPoints.indexOf(point);
+      const previous = loggedIndex > 0 ? loggedPoints[loggedIndex - 1] : null;
       const delta = previous ? formatWeightDelta(point.grams - previous.grams) : 'first weight';
       const key = `${baby.id}-${point.timestamp}-${Math.round(point.grams)}`;
       return { baby, point, delta, key };
@@ -1418,19 +1675,72 @@ function weightTrendModel(activeBabies) {
     _selectedWeightPointKey = latestPoint?.key || null;
   }
 
-  return { series, allPoints, pointModels };
+  const totalWeights = loggedSeries.reduce((sum, item) => sum + item.points.length, 0);
+  return { loggedSeries, series, allPoints, pointModels, totalWeights, missingAgeCount, outsideRangeCount };
+}
+
+function weightGrowthPercentileOptions() {
+  return normalizeWeightGrowthPercentiles(_weightGrowthPercentiles).map((key) => weightGrowthPercentileByKey(key));
+}
+
+function whoWeightForAgeKg(row, percentile) {
+  const [, l, m, s] = row;
+  if (l === 0) return m * Math.exp(s * percentile.z);
+  return m * Math.pow(1 + l * s * percentile.z, 1 / l);
+}
+
+function whoReferenceRows(sex = _weightGrowthSex) {
+  return WHO_WEIGHT_FOR_AGE_LMS[weightGrowthSexById(sex).id] || WHO_WEIGHT_FOR_AGE_LMS[DEFAULT_WEIGHT_GROWTH_SEX];
+}
+
+function whoReferenceData(sex, percentile) {
+  return whoReferenceRows(sex).map((row) => ({ x: row[0], y: whoWeightForAgeKg(row, percentile) * 1000, reference: true, percentile: percentile.name }));
+}
+
+function growthSettingSummary() {
+  const sex = weightGrowthSexById(_weightGrowthSex).name;
+  const percentiles = weightGrowthPercentileOptions().map((percentile) => percentile.name).join(', ');
+  return `${sex} · ${percentiles}`;
+}
+
+function renderWeightSelectedMarkup(model, state) {
+  if (model) {
+    return `
+      <div id="dash-weight-selected" class="dash-weight-selected" style="--baby-colour:${model.baby.colour}">
+        <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
+        <span class="dash-weight-selected-weight">${escapeHtml(formatWeightLbOz(model.point.grams))}</span>
+        <span class="dash-weight-selected-meta">${escapeHtml(formatGrowthAge(model.point.ageMonths))} old · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>
+      </div>`;
+  }
+
+  const message = state.totalWeights
+    ? state.missingAgeCount
+      ? 'Add birth dates in Settings to plot logged weights by age.'
+      : 'Logged weights are outside the birth-to-24-month chart.'
+    : 'No weights logged yet.';
+  return `
+    <div id="dash-weight-selected" class="dash-weight-selected dash-weight-selected--empty">
+      <span class="dash-weight-selected-name">WHO weight-for-age</span>
+      <span class="dash-weight-selected-meta">${escapeHtml(message)}</span>
+    </div>`;
+}
+
+function renderWeightZoomControls() {
+  const state = weightGrowthZoomState();
+  return `
+    <div id="dash-weight-zoom" class="dash-weight-zoom" aria-label="Weight chart zoom controls">
+      <button class="dash-weight-zoom-btn" type="button" data-weight-zoom="out" aria-label="Zoom out" title="Zoom out" ${state.canZoomOut ? '' : 'disabled'}>&minus;</button>
+      <span class="dash-weight-zoom-range">${escapeHtml(weightGrowthViewLabel())}</span>
+      <button class="dash-weight-zoom-btn" type="button" data-weight-zoom="in" aria-label="Zoom in" title="Zoom in" ${state.canZoomIn ? '' : 'disabled'}>+</button>
+      <button class="dash-weight-zoom-btn" type="button" data-weight-zoom="reset" aria-label="Reset zoom" title="Reset" ${state.isFull ? 'disabled' : ''}>&#x21ba;</button>
+    </div>`;
 }
 
 function renderWeightTrend(activeBabies) {
-  const { series, allPoints, pointModels } = weightTrendModel(activeBabies);
-
-  if (!allPoints.length) {
-    return '<p class="log-empty dash-weight-empty">No weights logged yet.</p>';
-  }
-
-  const selectedPoint = pointModels.find((model) => model.key === _selectedWeightPointKey) || pointModels[0];
-
-  const legend = series
+  const model = weightTrendModel(activeBabies);
+  const { loggedSeries, pointModels } = model;
+  const selectedPoint = pointModels.find((pointModel) => pointModel.key === _selectedWeightPointKey) || pointModels[0];
+  const legend = loggedSeries
     .map(
       ({ baby, points }) => {
         const latest = points[points.length - 1];
@@ -1447,19 +1757,28 @@ function renderWeightTrend(activeBabies) {
       },
     )
     .join('');
+  const dobNote = model.missingAgeCount
+    ? `<div class="dash-weight-note">${escapeHtml(model.missingAgeCount === 1 ? '1 logged weight needs a birth date to plot by age.' : `${model.missingAgeCount} logged weights need birth dates to plot by age.`)}</div>`
+    : '';
+  const rangeNote = model.outsideRangeCount
+    ? `<div class="dash-weight-note">${escapeHtml(`${model.outsideRangeCount} weight${model.outsideRangeCount === 1 ? '' : 's'} after 24 months ${model.outsideRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
+    : '';
 
   return `
     <div class="dash-weight-plot">
+      <div class="dash-weight-chart-meta">
+        <span>WHO weight-for-age</span>
+        <span>${escapeHtml(growthSettingSummary())}</span>
+      </div>
+      ${renderWeightZoomControls()}
       <div class="dash-weight-scroll" aria-label="Scrollable weight chart">
         <div class="dash-weight-canvas-wrap">
           <canvas id="dash-weight-canvas" class="dash-weight-canvas" width="720" height="360"></canvas>
         </div>
       </div>
-      <div id="dash-weight-selected" class="dash-weight-selected" style="--baby-colour:${selectedPoint.baby.colour}">
-        <span class="dash-weight-selected-name">${escapeHtml(selectedPoint.baby.name)}</span>
-        <span class="dash-weight-selected-weight">${escapeHtml(formatWeightLbOz(selectedPoint.point.grams))}</span>
-        <span class="dash-weight-selected-meta">${escapeHtml(formatTime(new Date(selectedPoint.point.timestamp).toISOString()))} · ${escapeHtml(selectedPoint.delta)}</span>
-      </div>
+      ${renderWeightSelectedMarkup(selectedPoint, model)}
+      ${dobNote}
+      ${rangeNote}
       <div class="dash-weight-legend">${legend}</div>
     </div>`;
 }
@@ -1470,10 +1789,22 @@ function updateDashboardWeightSelection(model) {
   const selected = document.getElementById('dash-weight-selected');
   if (!selected) return;
   selected.style.setProperty('--baby-colour', model.baby.colour || 'var(--accent)');
+  selected.classList.remove('dash-weight-selected--empty');
   selected.innerHTML = `
     <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
     <span class="dash-weight-selected-weight">${escapeHtml(formatWeightLbOz(model.point.grams))}</span>
-    <span class="dash-weight-selected-meta">${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>`;
+    <span class="dash-weight-selected-meta">${escapeHtml(formatGrowthAge(model.point.ageMonths))} old · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>`;
+}
+
+function wireWeightZoomControls() {
+  document.querySelectorAll('[data-weight-zoom]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.weightZoom === 'in') zoomWeightGrowthView('in');
+      if (btn.dataset.weightZoom === 'out') zoomWeightGrowthView('out');
+      if (btn.dataset.weightZoom === 'reset') resetWeightGrowthView();
+      renderDashboard();
+    });
+  });
 }
 
 function initWeightTrendChart(activeBabies) {
@@ -1485,48 +1816,57 @@ function initWeightTrendChart(activeBabies) {
   if (!canvas || !globalThis.Chart) return;
 
   const { series, allPoints, pointModels } = weightTrendModel(activeBabies);
-  if (!allPoints.length) return;
-
-  const timestamps = allPoints.map((point) => point.timestamp);
-  const weights = allPoints.map((point) => point.grams);
-  let minTime = Math.min(...timestamps);
-  let maxTime = Math.max(...timestamps);
-  let minWeight = Math.min(...weights);
-  let maxWeight = Math.max(...weights);
-  if (minTime === maxTime) {
-    minTime -= 43200000;
-    maxTime += 43200000;
-  }
-  const weightPadding = Math.max(30, (maxWeight - minWeight) * 0.08);
-  minWeight = Math.max(0, minWeight - weightPadding);
-  maxWeight += weightPadding;
-  if (minWeight === maxWeight) maxWeight = minWeight + 100;
+  const view = normalizeWeightGrowthView();
+  const referenceRows = whoReferenceRows();
+  const low = weightGrowthPercentileByKey('p3');
+  const high = weightGrowthPercentileByKey('p97');
+  const visibleReferenceRows = referenceRows.filter((row) => row[0] >= view.min && row[0] <= view.max);
+  const boundedReferenceRows = visibleReferenceRows.length ? visibleReferenceRows : referenceRows;
+  const referenceBounds = boundedReferenceRows.flatMap((row) => [whoWeightForAgeKg(row, low) * 1000, whoWeightForAgeKg(row, high) * 1000]);
+  const weights = allPoints.filter((point) => point.ageMonths >= view.min && point.ageMonths <= view.max).map((point) => point.grams);
+  let minWeight = Math.min(...referenceBounds, ...weights);
+  let maxWeight = Math.max(...referenceBounds, ...weights);
+  const weightPadding = Math.max(250, (maxWeight - minWeight) * 0.04);
+  minWeight = Math.max(0, Math.floor((minWeight - weightPadding) / 500) * 500);
+  maxWeight = Math.ceil((maxWeight + weightPadding) / 500) * 500;
 
   const rootStyles = getComputedStyle(document.documentElement);
   const chartGridColor = rootStyles.getPropertyValue('--chart-grid').trim() || 'rgba(142, 142, 147, 0.22)';
   const chartTextColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+  const growthLineColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
   const findModel = (babyId, timestamp, grams) =>
     pointModels.find((model) => model.baby.id === babyId && model.point.timestamp === timestamp && model.point.grams === grams);
+  const referenceDatasets = weightGrowthPercentileOptions().map((percentile) => ({
+    label: `${percentile.name} percentile`,
+    borderColor: percentile.key === 'p50' ? growthLineColor : chartGridColor,
+    backgroundColor: 'transparent',
+    data: whoReferenceData(_weightGrowthSex, percentile),
+    tension: 0.35,
+    borderWidth: percentile.key === 'p50' ? 1.6 : 1.1,
+    borderDash: percentile.key === 'p50' ? [] : [5, 5],
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    pointHitRadius: 8,
+  }));
+  const babyDatasets = series.map(({ baby, points }) => ({
+    label: baby.name,
+    borderColor: baby.colour,
+    backgroundColor: baby.colour,
+    data: points.map((point) => ({ x: point.ageMonths, y: point.grams, babyId: baby.id, timestamp: point.timestamp })),
+    tension: 0.25,
+    borderWidth: 1.8,
+    pointRadius: (ctx) => {
+      const raw = ctx.raw;
+      const model = raw ? findModel(raw.babyId, raw.timestamp, raw.y) : null;
+      return model?.key === _selectedWeightPointKey ? 5 : 3;
+    },
+    pointHoverRadius: 6,
+    pointHitRadius: 14,
+  }));
 
   weightTrendChart = new Chart(canvas, {
     type: 'line',
-    data: {
-      datasets: series.map(({ baby, points }) => ({
-        label: baby.name,
-        borderColor: baby.colour,
-        backgroundColor: baby.colour,
-        data: points.map((point) => ({ x: point.timestamp, y: point.grams, babyId: baby.id })),
-        tension: 0.25,
-        borderWidth: 1.8,
-        pointRadius: (ctx) => {
-          const raw = ctx.raw;
-          const model = raw ? findModel(raw.babyId, raw.x, raw.y) : null;
-          return model?.key === _selectedWeightPointKey ? 5 : 3;
-        },
-        pointHoverRadius: 6,
-        pointHitRadius: 14,
-      })),
-    },
+    data: { datasets: [...referenceDatasets, ...babyDatasets] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1536,20 +1876,23 @@ function initWeightTrendChart(activeBabies) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) => (items[0]?.raw ? formatTime(new Date(items[0].raw.x).toISOString()) : ''),
-            label: (item) => `${item.dataset.label}: ${formatWeightLbOz(item.raw.y)}`,
+            title: (items) => (items[0]?.raw?.reference ? `${items[0].raw.x} months` : `${formatGrowthAge(items[0]?.raw?.x)} old`),
+            label: (item) =>
+              item.raw?.reference
+                ? `${item.raw.percentile}: ${formatWeightLbOz(item.raw.y)}`
+                : `${item.dataset.label}: ${formatWeightLbOz(item.raw.y)}`,
           },
         },
       },
       scales: {
         x: {
           type: 'linear',
-          min: minTime,
-          max: maxTime,
+          min: view.min,
+          max: view.max,
           ticks: {
             color: chartTextColor,
-            maxTicksLimit: 5,
-            callback: (value) => formatWeightTrendDate(value),
+            stepSize: weightGrowthTickStep(),
+            callback: (value) => formatGrowthMonth(value),
           },
           grid: { color: chartGridColor },
         },
@@ -1566,10 +1909,10 @@ function initWeightTrendChart(activeBabies) {
       },
       onClick: (event) => {
         const points = weightTrendChart.getElementsAtEventForMode(event, 'nearest', { intersect: false }, true);
-        const hit = points[0];
+        const hit = points.find((candidate) => !weightTrendChart.data.datasets[candidate.datasetIndex].data[candidate.index]?.reference);
         if (!hit) return;
         const raw = weightTrendChart.data.datasets[hit.datasetIndex].data[hit.index];
-        const model = findModel(raw.babyId, raw.x, raw.y);
+        const model = findModel(raw.babyId, raw.timestamp, raw.y);
         updateDashboardWeightSelection(model);
         weightTrendChart.update('none');
       },
@@ -2117,9 +2460,11 @@ function renderPersonCards(kind) {
   list.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'med-card';
+    const birthDetail = kind === 'babies' && item.birthDate ? `<div class="med-card-details">Born ${escapeHtml(formatBabyBirthDate(item.birthDate))}</div>` : '';
     card.innerHTML = `
       <div class="med-card-info">
         <div class="med-card-name">${escapeHtml(item.name)}</div>
+        ${birthDetail}
       </div>
       <button class="med-card-edit-btn" data-kind="${kind}" data-id="${item.id}" title="Edit">✎</button>
       <button class="settings-delete-btn" data-kind="${kind}" data-id="${item.id}" title="Delete">×</button>
@@ -2148,6 +2493,11 @@ function openPersonForm(kind, id = null) {
   const item = id ? data[kind].find((record) => record.id === id) : null;
   document.getElementById('person-form-title').textContent = id ? 'Edit' : kind === 'users' ? 'New parent' : 'New baby';
   document.getElementById('person-form-name').value = item?.name || '';
+  const birthdateLabel = document.getElementById('person-form-birthdate-label');
+  const birthdateInput = document.getElementById('person-form-birthdate');
+  const isBaby = kind === 'babies';
+  birthdateLabel.classList.toggle('hidden', !isBaby);
+  birthdateInput.value = isBaby ? item?.birthDate || '' : '';
   document.getElementById('person-form').classList.remove('hidden');
   document.getElementById('person-form-name').focus();
 }
@@ -2160,22 +2510,26 @@ function closePersonForm() {
 async function savePersonForm() {
   const name = document.getElementById('person-form-name').value.trim();
   if (!name || !_personEdit) return;
+  const birthDate = _personEdit.kind === 'babies' ? normalizeDateOnly(document.getElementById('person-form-birthdate').value) : null;
   const stamp = nowIso();
   await mutateData((next) => {
     if (_personEdit.id) {
       const item = next[_personEdit.kind].find((record) => record.id === _personEdit.id);
       if (item) {
         item.name = name;
+        if (_personEdit.kind === 'babies') item.birthDate = birthDate;
         item.updatedAt = stamp;
       }
     } else {
-      next[_personEdit.kind].push({
+      const item = {
         id: slugify(name, _personEdit.kind === 'users' ? 'user_' : 'baby_'),
         name,
         createdAt: stamp,
         updatedAt: stamp,
         deletedAt: null,
-      });
+      };
+      if (_personEdit.kind === 'babies') item.birthDate = birthDate;
+      next[_personEdit.kind].push(item);
     }
   });
   closePersonForm();
@@ -2307,12 +2661,66 @@ function showSettingsConfirmation() {
   setTimeout(() => conf.classList.add('hidden'), 2000);
 }
 
+function renderGrowthChartSettings() {
+  const el = document.getElementById('growth-chart-settings');
+  if (!el) return;
+  const selectedSex = weightGrowthSexById(_weightGrowthSex).id;
+  const selectedPercentiles = new Set(normalizeWeightGrowthPercentiles(_weightGrowthPercentiles));
+  el.innerHTML = `
+    <div class="growth-setting-group">
+      <div class="growth-setting-label">WHO chart</div>
+      <div class="growth-sex-options" role="radiogroup" aria-label="WHO growth chart">
+        ${WEIGHT_GROWTH_SEXES.map(
+          (sex) => `
+          <button
+            class="growth-sex-option"
+            type="button"
+            data-growth-sex="${sex.id}"
+            role="radio"
+            aria-checked="${sex.id === selectedSex ? 'true' : 'false'}"
+          >${escapeHtml(sex.name)}</button>`,
+        ).join('')}
+      </div>
+    </div>
+    <div class="growth-setting-group">
+      <div class="growth-setting-label">Percentiles</div>
+      <div class="growth-percentile-options">
+        ${WHO_WEIGHT_PERCENTILES.map(
+          (percentile) => `
+          <label class="growth-percentile-option">
+            <input type="checkbox" value="${percentile.key}" ${selectedPercentiles.has(percentile.key) ? 'checked' : ''} />
+            <span>${escapeHtml(percentile.name)}</span>
+          </label>`,
+        ).join('')}
+      </div>
+    </div>`;
+
+  el.querySelectorAll('[data-growth-sex]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      saveWeightGrowthSex(btn.dataset.growthSex);
+      renderGrowthChartSettings();
+      if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard();
+    });
+  });
+
+  el.querySelectorAll('.growth-percentile-option input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const checked = [...el.querySelectorAll('.growth-percentile-option input:checked')].map((item) => item.value);
+      const next = checked.length ? checked : ['p50'];
+      saveWeightGrowthPercentiles(next);
+      renderGrowthChartSettings();
+      if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard();
+    });
+  });
+}
+
 function renderSettings() {
   renderSetupGuide();
   renderColorModeOptions();
   renderThemeOptions();
   renderPersonCards('users');
   renderPersonCards('babies');
+  renderGrowthChartSettings();
   renderMedCards();
   updateSyncUi();
 }
@@ -2427,6 +2835,7 @@ function renderDashboard() {
 
   weightChart.innerHTML = renderWeightTrend(activeBabies);
   initWeightTrendChart(activeBabies);
+  wireWeightZoomControls();
   refreshDashboardLiveTimes();
   scheduleDashboardClockRefresh();
 }
