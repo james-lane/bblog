@@ -1027,7 +1027,7 @@ main::before {
 
 .growth-percentile-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 8px;
 }
 
@@ -1378,7 +1378,7 @@ main::before {
 
 .dash-weight-zoom {
   display: grid;
-  grid-template-columns: 36px minmax(74px, 1fr) 36px 36px;
+  grid-template-columns: 36px 36px minmax(74px, 1fr) 36px 36px 36px;
   align-items: center;
   gap: 6px;
 }
