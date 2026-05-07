@@ -1467,6 +1467,7 @@ main::before {
   font-weight: 900;
   line-height: 1;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .dash-weight-selected-meta {
@@ -1485,6 +1486,10 @@ main::before {
   font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.3;
+}
+
+.dash-weight-note--estimated {
+  color: var(--text);
 }
 
 .dash-weight-legend {

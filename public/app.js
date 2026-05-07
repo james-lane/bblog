@@ -1452,6 +1452,16 @@ function formatWeightLbOz(grams) {
   return `${pounds} lb ${formatOunces(ounces)} oz`;
 }
 
+function formatWeightGrams(grams) {
+  if (!Number.isFinite(grams) || grams <= 0) return '—';
+  return `${Math.round(grams).toLocaleString()} g`;
+}
+
+function formatWeightWithGrams(grams) {
+  if (!Number.isFinite(grams) || grams <= 0) return '—';
+  return `${formatWeightLbOz(grams)} (${formatWeightGrams(grams)})`;
+}
+
 function formatWeightDelta(grams) {
   if (!Number.isFinite(grams) || grams === 0) return 'no change';
   const sign = grams > 0 ? '+' : '-';
@@ -1482,6 +1492,13 @@ function ageMonthsAt(timestamp, birthDate) {
   const timestampMs = new Date(timestamp).getTime();
   if (birthMs == null || !Number.isFinite(timestampMs)) return null;
   return (timestampMs - birthMs) / 86400000 / DAYS_PER_MONTH;
+}
+
+function ageMonthsBetween(timestamp, baselineTimestamp) {
+  const timestampMs = new Date(timestamp).getTime();
+  const baselineMs = new Date(baselineTimestamp).getTime();
+  if (!Number.isFinite(timestampMs) || !Number.isFinite(baselineMs)) return null;
+  return (timestampMs - baselineMs) / 86400000 / DAYS_PER_MONTH;
 }
 
 function formatGrowthAge(ageMonths) {
@@ -1586,10 +1603,17 @@ function weightTrendByBaby(activeBabies) {
     const grams = weightGrams(e);
     const timestamp = new Date(e.timestamp).getTime();
     if (!grams || !Number.isFinite(timestamp)) continue;
-    byBaby[e.baby].push({ timestamp, grams, ageMonths: ageMonthsAt(timestamp, baby.birthDate) });
+    byBaby[e.baby].push({ timestamp, grams, ageMonths: ageMonthsAt(timestamp, baby.birthDate), ageEstimated: false });
   }
-  for (const points of Object.values(byBaby)) {
+  for (const baby of activeBabies) {
+    const points = byBaby[baby.id] || [];
     points.sort((a, b) => a.timestamp - b.timestamp);
+    if (baby.birthDate || !points.length) continue;
+    const baselineTimestamp = points[0].timestamp;
+    points.forEach((point) => {
+      point.ageMonths = ageMonthsBetween(point.timestamp, baselineTimestamp);
+      point.ageEstimated = true;
+    });
   }
   return byBaby;
 }
@@ -1642,6 +1666,7 @@ function weightTrendModel(activeBabies) {
     .map((baby) => ({ baby, points: seriesByBaby[baby.id] || [] }))
     .filter(({ points }) => points.length);
   let missingAgeCount = 0;
+  let estimatedAgeCount = 0;
   let outsideRangeCount = 0;
   const series = loggedSeries
     .map(({ baby, points }) => {
@@ -1654,6 +1679,7 @@ function weightTrendModel(activeBabies) {
           outsideRangeCount += 1;
           return false;
         }
+        if (point.ageEstimated) estimatedAgeCount += 1;
         return true;
       });
       return { baby, points: plottable, loggedPoints: points };
@@ -1676,7 +1702,7 @@ function weightTrendModel(activeBabies) {
   }
 
   const totalWeights = loggedSeries.reduce((sum, item) => sum + item.points.length, 0);
-  return { loggedSeries, series, allPoints, pointModels, totalWeights, missingAgeCount, outsideRangeCount };
+  return { loggedSeries, series, allPoints, pointModels, totalWeights, missingAgeCount, estimatedAgeCount, outsideRangeCount };
 }
 
 function weightGrowthPercentileOptions() {
@@ -1705,11 +1731,12 @@ function growthSettingSummary() {
 
 function renderWeightSelectedMarkup(model, state) {
   if (model) {
+    const ageText = model.point.ageEstimated ? `${formatGrowthAge(model.point.ageMonths)} from first weight` : `${formatGrowthAge(model.point.ageMonths)} old`;
     return `
       <div id="dash-weight-selected" class="dash-weight-selected" style="--baby-colour:${model.baby.colour}">
         <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
-        <span class="dash-weight-selected-weight">${escapeHtml(formatWeightLbOz(model.point.grams))}</span>
-        <span class="dash-weight-selected-meta">${escapeHtml(formatGrowthAge(model.point.ageMonths))} old · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>
+        <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(model.point.grams))}</span>
+        <span class="dash-weight-selected-meta">${escapeHtml(ageText)} · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>
       </div>`;
   }
 
@@ -1751,7 +1778,7 @@ function renderWeightTrend(activeBabies) {
           <span class="dash-weight-legend-swatch" style="--baby-colour:${baby.colour}"></span>
           <span class="dash-weight-legend-copy">
             <span class="dash-weight-legend-name">${escapeHtml(baby.name)}</span>
-            <span class="dash-weight-legend-detail">${escapeHtml(formatWeightLbOz(latest.grams))} · ${escapeHtml(delta)}</span>
+            <span class="dash-weight-legend-detail">${escapeHtml(formatWeightWithGrams(latest.grams))} · ${escapeHtml(delta)}</span>
           </span>
         </span>`;
       },
@@ -1759,6 +1786,9 @@ function renderWeightTrend(activeBabies) {
     .join('');
   const dobNote = model.missingAgeCount
     ? `<div class="dash-weight-note">${escapeHtml(model.missingAgeCount === 1 ? '1 logged weight needs a birth date to plot by age.' : `${model.missingAgeCount} logged weights need birth dates to plot by age.`)}</div>`
+    : '';
+  const estimateNote = model.estimatedAgeCount
+    ? `<div class="dash-weight-note dash-weight-note--estimated">${escapeHtml(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth date is set.' : "Using each baby's first logged weight as 0m until birth dates are set.")}</div>`
     : '';
   const rangeNote = model.outsideRangeCount
     ? `<div class="dash-weight-note">${escapeHtml(`${model.outsideRangeCount} weight${model.outsideRangeCount === 1 ? '' : 's'} after 24 months ${model.outsideRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
@@ -1778,6 +1808,7 @@ function renderWeightTrend(activeBabies) {
       </div>
       ${renderWeightSelectedMarkup(selectedPoint, model)}
       ${dobNote}
+      ${estimateNote}
       ${rangeNote}
       <div class="dash-weight-legend">${legend}</div>
     </div>`;
@@ -1790,10 +1821,11 @@ function updateDashboardWeightSelection(model) {
   if (!selected) return;
   selected.style.setProperty('--baby-colour', model.baby.colour || 'var(--accent)');
   selected.classList.remove('dash-weight-selected--empty');
+  const ageText = model.point.ageEstimated ? `${formatGrowthAge(model.point.ageMonths)} from first weight` : `${formatGrowthAge(model.point.ageMonths)} old`;
   selected.innerHTML = `
     <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
-    <span class="dash-weight-selected-weight">${escapeHtml(formatWeightLbOz(model.point.grams))}</span>
-    <span class="dash-weight-selected-meta">${escapeHtml(formatGrowthAge(model.point.ageMonths))} old · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>`;
+    <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(model.point.grams))}</span>
+    <span class="dash-weight-selected-meta">${escapeHtml(ageText)} · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>`;
 }
 
 function wireWeightZoomControls() {
@@ -1879,8 +1911,8 @@ function initWeightTrendChart(activeBabies) {
             title: (items) => (items[0]?.raw?.reference ? `${items[0].raw.x} months` : `${formatGrowthAge(items[0]?.raw?.x)} old`),
             label: (item) =>
               item.raw?.reference
-                ? `${item.raw.percentile}: ${formatWeightLbOz(item.raw.y)}`
-                : `${item.dataset.label}: ${formatWeightLbOz(item.raw.y)}`,
+                ? `${item.raw.percentile}: ${formatWeightWithGrams(item.raw.y)}`
+                : `${item.dataset.label}: ${formatWeightWithGrams(item.raw.y)}`,
           },
         },
       },
