@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260507-who-growth-expanded-percentiles" />
+  <link rel="stylesheet" href="/styles.css?v=20260507-due-date-growth-baseline" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -277,6 +277,10 @@
           <label id="person-form-birthdate-label" class="med-form-label hidden">Birth date
             <input id="person-form-birthdate" class="med-form-input" type="date" autocomplete="off" />
           </label>
+          <label id="person-form-duedate-label" class="med-form-label hidden">Due date
+            <input id="person-form-duedate" class="med-form-input" type="date" autocomplete="off" />
+            <span class="med-form-help">When set, due date is used as 0m on the weight growth chart.</span>
+          </label>
         </div>
         <div class="form-actions" style="margin-top:12px;">
           <button id="person-form-cancel" class="btn btn-secondary">Cancel</button>
@@ -338,6 +342,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260507-who-growth-expanded-percentiles"></script>
+  <script src="/app.js?v=20260507-due-date-growth-baseline"></script>
 </body>
 </html>

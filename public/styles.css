@@ -1166,6 +1166,15 @@ main::before {
 
 .med-form-input:focus { box-shadow: 0 0 0 3px var(--focus-ring); }
 
+.med-form-help {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 .med-alert {
   display: flex;
   align-items: flex-start;

@@ -2255,6 +2255,7 @@ function normalizeData(value) {
       id: item.id,
       name: String(item.name || item.label || '').trim() || 'Baby',
       birthDate: normalizeDateOnly(item.birthDate || item.dateOfBirth || item.dob),
+      dueDate: normalizeDateOnly(item.dueDate || item.estimatedDueDate || item.edd),
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       deletedAt: item.deletedAt || null,
@@ -2926,6 +2927,17 @@ function ageMonthsBetween(timestamp, baselineTimestamp) {
   return (timestampMs - baselineMs) / 86400000 / DAYS_PER_MONTH;
 }
 
+function babyGrowthChartBaseline(baby) {
+  const dueDate = normalizeDateOnly(baby?.dueDate);
+  const birthDate = normalizeDateOnly(baby?.birthDate);
+  const date = dueDate || birthDate;
+  if (!date) return null;
+  return {
+    date,
+    type: dueDate ? 'dueDate' : 'birthDate',
+  };
+}
+
 function formatGrowthAge(ageMonths) {
   if (!Number.isFinite(ageMonths)) return '';
   if (ageMonths < 1) {
@@ -3045,16 +3057,24 @@ function weightTrendByBaby(activeBabies) {
     const grams = weightGrams(e);
     const timestamp = new Date(e.timestamp).getTime();
     if (!grams || !Number.isFinite(timestamp)) continue;
-    byBaby[e.baby].push({ timestamp, grams, ageMonths: ageMonthsAt(timestamp, baby.birthDate), ageEstimated: false });
+    const baseline = babyGrowthChartBaseline(baby);
+    byBaby[e.baby].push({
+      timestamp,
+      grams,
+      ageMonths: ageMonthsAt(timestamp, baseline?.date),
+      ageEstimated: false,
+      ageBaseline: baseline?.type || null,
+    });
   }
   for (const baby of activeBabies) {
     const points = byBaby[baby.id] || [];
     points.sort((a, b) => a.timestamp - b.timestamp);
-    if (baby.birthDate || !points.length) continue;
+    if (babyGrowthChartBaseline(baby) || !points.length) continue;
     const baselineTimestamp = points[0].timestamp;
     points.forEach((point) => {
       point.ageMonths = ageMonthsBetween(point.timestamp, baselineTimestamp);
       point.ageEstimated = true;
+      point.ageBaseline = 'firstWeight';
     });
   }
   return byBaby;
@@ -3109,7 +3129,8 @@ function weightTrendModel(activeBabies) {
     .filter(({ points }) => points.length);
   let missingAgeCount = 0;
   let estimatedAgeCount = 0;
-  let outsideRangeCount = 0;
+  let beforeRangeCount = 0;
+  let afterRangeCount = 0;
   const series = loggedSeries
     .map(({ baby, points }) => {
       const plottable = points.filter((point) => {
@@ -3117,8 +3138,12 @@ function weightTrendModel(activeBabies) {
           missingAgeCount += 1;
           return false;
         }
-        if (point.ageMonths < 0 || point.ageMonths > 24) {
-          outsideRangeCount += 1;
+        if (point.ageMonths < 0) {
+          beforeRangeCount += 1;
+          return false;
+        }
+        if (point.ageMonths > 24) {
+          afterRangeCount += 1;
           return false;
         }
         if (point.ageEstimated) estimatedAgeCount += 1;
@@ -3144,7 +3169,17 @@ function weightTrendModel(activeBabies) {
   }
 
   const totalWeights = loggedSeries.reduce((sum, item) => sum + item.points.length, 0);
-  return { loggedSeries, series, allPoints, pointModels, totalWeights, missingAgeCount, estimatedAgeCount, outsideRangeCount };
+  return {
+    loggedSeries,
+    series,
+    allPoints,
+    pointModels,
+    totalWeights,
+    missingAgeCount,
+    estimatedAgeCount,
+    beforeRangeCount,
+    afterRangeCount,
+  };
 }
 
 function weightGrowthPercentileOptions() {
@@ -3170,8 +3205,22 @@ function whoReferenceData(sex, percentile) {
     x: whoReferenceAgeMonths(row),
     y: whoWeightForAgeKg(row, percentile) * 1000,
     reference: true,
+    ageDays: row[0],
     percentile: percentile.name,
   }));
+}
+
+function formatWeightChartTooltipAge(raw) {
+  if (!raw) return '';
+  if (raw.reference) return formatGrowthAge(raw.x);
+  return raw.ageBaseline === 'dueDate' ? `${formatGrowthAge(raw.x)} corrected age` : `${formatGrowthAge(raw.x)} old`;
+}
+
+function formatWeightPointAge(point) {
+  if (!point) return '';
+  if (point.ageEstimated) return `${formatGrowthAge(point.ageMonths)} from first weight`;
+  if (point.ageBaseline === 'dueDate') return `${formatGrowthAge(point.ageMonths)} corrected age`;
+  return `${formatGrowthAge(point.ageMonths)} old`;
 }
 
 function growthSettingSummary() {
@@ -3182,7 +3231,7 @@ function growthSettingSummary() {
 
 function renderWeightSelectedMarkup(model, state) {
   if (model) {
-    const ageText = model.point.ageEstimated ? `${formatGrowthAge(model.point.ageMonths)} from first weight` : `${formatGrowthAge(model.point.ageMonths)} old`;
+    const ageText = formatWeightPointAge(model.point);
     return `
       <div id="dash-weight-selected" class="dash-weight-selected" style="--baby-colour:${model.baby.colour}">
         <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
@@ -3193,7 +3242,7 @@ function renderWeightSelectedMarkup(model, state) {
 
   const message = state.totalWeights
     ? state.missingAgeCount
-      ? 'Add birth dates in Settings to plot logged weights by age.'
+      ? 'Add birth or due dates in Settings to plot logged weights by age.'
       : 'Logged weights are outside the birth-to-24-month chart.'
     : 'No weights logged yet.';
   return `
@@ -3238,13 +3287,20 @@ function renderWeightTrend(activeBabies) {
     )
     .join('');
   const dobNote = model.missingAgeCount
-    ? `<div class="dash-weight-note">${escapeHtml(model.missingAgeCount === 1 ? '1 logged weight needs a birth date to plot by age.' : `${model.missingAgeCount} logged weights need birth dates to plot by age.`)}</div>`
+    ? `<div class="dash-weight-note">${escapeHtml(model.missingAgeCount === 1 ? '1 logged weight needs a birth or due date to plot by age.' : `${model.missingAgeCount} logged weights need birth or due dates to plot by age.`)}</div>`
     : '';
   const estimateNote = model.estimatedAgeCount
-    ? `<div class="dash-weight-note dash-weight-note--estimated">${escapeHtml(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth date is set.' : "Using each baby's first logged weight as 0m until birth dates are set.")}</div>`
+    ? `<div class="dash-weight-note dash-weight-note--estimated">${escapeHtml(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth or due date is set.' : "Using each baby's first logged weight as 0m until birth or due dates are set.")}</div>`
     : '';
-  const rangeNote = model.outsideRangeCount
-    ? `<div class="dash-weight-note">${escapeHtml(`${model.outsideRangeCount} weight${model.outsideRangeCount === 1 ? '' : 's'} after 24 months ${model.outsideRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
+  const dueDateBabies = activeBabies.filter((baby) => normalizeDateOnly(baby.dueDate));
+  const dueDateNote = dueDateBabies.length
+    ? `<div class="dash-weight-note">${escapeHtml(`Using due date as 0m on the growth chart for ${dueDateBabies.map((baby) => baby.name).join(', ')}.`)}</div>`
+    : '';
+  const beforeRangeNote = model.beforeRangeCount
+    ? `<div class="dash-weight-note">${escapeHtml(`${model.beforeRangeCount} weight${model.beforeRangeCount === 1 ? '' : 's'} before the growth chart baseline ${model.beforeRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
+    : '';
+  const afterRangeNote = model.afterRangeCount
+    ? `<div class="dash-weight-note">${escapeHtml(`${model.afterRangeCount} weight${model.afterRangeCount === 1 ? '' : 's'} after 24 months ${model.afterRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
     : '';
 
   return `
@@ -3260,9 +3316,11 @@ function renderWeightTrend(activeBabies) {
         </div>
       </div>
       ${renderWeightSelectedMarkup(selectedPoint, model)}
+      ${dueDateNote}
       ${dobNote}
       ${estimateNote}
-      ${rangeNote}
+      ${beforeRangeNote}
+      ${afterRangeNote}
       <div class="dash-weight-legend">${legend}</div>
     </div>`;
 }
@@ -3274,7 +3332,7 @@ function updateDashboardWeightSelection(model) {
   if (!selected) return;
   selected.style.setProperty('--baby-colour', model.baby.colour || 'var(--accent)');
   selected.classList.remove('dash-weight-selected--empty');
-  const ageText = model.point.ageEstimated ? `${formatGrowthAge(model.point.ageMonths)} from first weight` : `${formatGrowthAge(model.point.ageMonths)} old`;
+  const ageText = formatWeightPointAge(model.point);
   selected.innerHTML = `
     <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
     <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(model.point.grams))}</span>
@@ -3344,7 +3402,13 @@ function initWeightTrendChart(activeBabies) {
     label: baby.name,
     borderColor: baby.colour,
     backgroundColor: baby.colour,
-    data: points.map((point) => ({ x: point.ageMonths, y: point.grams, babyId: baby.id, timestamp: point.timestamp })),
+    data: points.map((point) => ({
+      x: point.ageMonths,
+      y: point.grams,
+      babyId: baby.id,
+      timestamp: point.timestamp,
+      ageBaseline: point.ageBaseline,
+    })),
     tension: 0.25,
     borderWidth: 1.8,
     pointRadius: (ctx) => {
@@ -3368,7 +3432,7 @@ function initWeightTrendChart(activeBabies) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) => (items[0]?.raw?.reference ? `${items[0].raw.x} months` : `${formatGrowthAge(items[0]?.raw?.x)} old`),
+            title: (items) => formatWeightChartTooltipAge(items[0]?.raw),
             label: (item) =>
               item.raw?.reference
                 ? `${item.raw.percentile}: ${formatWeightWithGrams(item.raw.y)}`
@@ -3952,7 +4016,10 @@ function renderPersonCards(kind) {
   list.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'med-card';
-    const birthDetail = kind === 'babies' && item.birthDate ? `<div class="med-card-details">Born ${escapeHtml(formatBabyBirthDate(item.birthDate))}</div>` : '';
+    const babyDetails = [];
+    if (kind === 'babies' && item.birthDate) babyDetails.push(`Born ${formatBabyBirthDate(item.birthDate)}`);
+    if (kind === 'babies' && item.dueDate) babyDetails.push(`Due ${formatBabyBirthDate(item.dueDate)}`);
+    const birthDetail = babyDetails.length ? `<div class="med-card-details">${escapeHtml(babyDetails.join(' · '))}</div>` : '';
     card.innerHTML = `
       <div class="med-card-info">
         <div class="med-card-name">${escapeHtml(item.name)}</div>
@@ -3987,9 +4054,13 @@ function openPersonForm(kind, id = null) {
   document.getElementById('person-form-name').value = item?.name || '';
   const birthdateLabel = document.getElementById('person-form-birthdate-label');
   const birthdateInput = document.getElementById('person-form-birthdate');
+  const duedateLabel = document.getElementById('person-form-duedate-label');
+  const duedateInput = document.getElementById('person-form-duedate');
   const isBaby = kind === 'babies';
   birthdateLabel.classList.toggle('hidden', !isBaby);
+  duedateLabel.classList.toggle('hidden', !isBaby);
   birthdateInput.value = isBaby ? item?.birthDate || '' : '';
+  duedateInput.value = isBaby ? item?.dueDate || '' : '';
   document.getElementById('person-form').classList.remove('hidden');
   document.getElementById('person-form-name').focus();
 }
@@ -4003,13 +4074,17 @@ async function savePersonForm() {
   const name = document.getElementById('person-form-name').value.trim();
   if (!name || !_personEdit) return;
   const birthDate = _personEdit.kind === 'babies' ? normalizeDateOnly(document.getElementById('person-form-birthdate').value) : null;
+  const dueDate = _personEdit.kind === 'babies' ? normalizeDateOnly(document.getElementById('person-form-duedate').value) : null;
   const stamp = nowIso();
   await mutateData((next) => {
     if (_personEdit.id) {
       const item = next[_personEdit.kind].find((record) => record.id === _personEdit.id);
       if (item) {
         item.name = name;
-        if (_personEdit.kind === 'babies') item.birthDate = birthDate;
+        if (_personEdit.kind === 'babies') {
+          item.birthDate = birthDate;
+          item.dueDate = dueDate;
+        }
         item.updatedAt = stamp;
       }
     } else {
@@ -4020,7 +4095,10 @@ async function savePersonForm() {
         updatedAt: stamp,
         deletedAt: null,
       };
-      if (_personEdit.kind === 'babies') item.birthDate = birthDate;
+      if (_personEdit.kind === 'babies') {
+        item.birthDate = birthDate;
+        item.dueDate = dueDate;
+      }
       next[_personEdit.kind].push(item);
     }
   });
