@@ -3365,6 +3365,43 @@ function updateWeightAgeSelection(model, ageMonths) {
   }
 }
 
+function weightChartAgeFromPointer(chart, event) {
+  const xScale = chart?.scales?.x;
+  if (!xScale || !Number.isFinite(event?.clientX)) return null;
+  const rect = chart.canvas.getBoundingClientRect();
+  if (!rect.width) return null;
+  const x = event.clientX - rect.left;
+  return xScale.getValueForPixel(x);
+}
+
+function wireWeightChartScrubber(canvas, chart, model) {
+  let activePointerId = null;
+  const updateFromPointer = (event) => {
+    const age = weightChartAgeFromPointer(chart, event);
+    if (age == null) return;
+    updateWeightAgeSelection(model, age);
+  };
+
+  canvas.addEventListener('pointerdown', (event) => {
+    activePointerId = event.pointerId;
+    canvas.setPointerCapture?.(event.pointerId);
+    updateFromPointer(event);
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (activePointerId !== event.pointerId) return;
+    updateFromPointer(event);
+  });
+
+  const finishScrub = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    canvas.releasePointerCapture?.(event.pointerId);
+    activePointerId = null;
+  };
+  canvas.addEventListener('pointerup', finishScrub);
+  canvas.addEventListener('pointercancel', finishScrub);
+}
+
 const weightSelectionLinePlugin = {
   id: 'weightSelectionLine',
   afterDatasetsDraw(chart, args, options) {
@@ -3505,7 +3542,7 @@ function initWeightTrendChart(activeBabies) {
           min: minWeight,
           max: maxWeight,
           ticks: {
-            color: chartTextColor,
+            display: false,
             maxTicksLimit: 6,
             callback: (value) => formatWeightLbOz(value),
           },
@@ -3520,6 +3557,7 @@ function initWeightTrendChart(activeBabies) {
       },
     },
   });
+  wireWeightChartScrubber(canvas, weightTrendChart, model);
 }
 
 function escapeHtml(str) {

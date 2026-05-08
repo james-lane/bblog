@@ -1,10 +1,10 @@
-const CACHE_NAME = 'bblog-v61';
+const CACHE_NAME = 'bblog-v62';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260508-fluid-chart-height-2',
+  '/styles.css?v=20260508-chart-scrubber',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260508-fluid-chart-height-2',
+  '/app.js?v=20260508-chart-scrubber',
   '/manifest.webmanifest',
   '/icon.svg',
 ];

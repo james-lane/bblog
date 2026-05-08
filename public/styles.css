@@ -1501,14 +1501,12 @@ main::before {
   min-height: 180px;
   margin: 0 -4px;
   padding: 0 4px 4px;
-  overflow-x: auto;
+  overflow: hidden;
   overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
 }
 
 .dash-weight-canvas-wrap {
-  width: max(100%, 760px);
+  width: 100%;
   height: clamp(340px, 54vh, 460px);
 }
 
@@ -1521,6 +1519,9 @@ main::before {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
 }
 
 .dash-weight-selected {
