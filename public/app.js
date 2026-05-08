@@ -24,6 +24,7 @@ const DAYS_PER_MONTH = 30.4375;
 const WEIGHT_GROWTH_AGE_MIN = 0;
 const WEIGHT_GROWTH_AGE_MAX = 24;
 const WEIGHT_GROWTH_VIEW_MONTHS = [3, 6, 12, 24];
+const DEFAULT_WEIGHT_GROWTH_VIEW_MONTHS = 3;
 const COLOR_MODES = [
   { id: 'system', name: 'System' },
   { id: 'light', name: 'Light' },
@@ -1597,7 +1598,7 @@ let _personEdit = null;
 let _selectedWeightAgeMonths = null;
 let _weightGrowthSex = selectedWeightGrowthSex();
 let _weightGrowthPercentiles = selectedWeightGrowthPercentiles();
-let _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MAX };
+let _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MIN + DEFAULT_WEIGHT_GROWTH_VIEW_MONTHS };
 let weightTrendChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
@@ -3407,8 +3408,8 @@ function renderWeightTrend(activeBabies) {
       </div>
       ${renderWeightSelectedMarkup(model, selectedAge)}
       ${renderWeightZoomControls()}
-      ${chartFooter}
-    </div>`;
+    </div>
+    ${chartFooter}`;
 }
 
 function updateWeightAgeSelection(model, ageMonths) {

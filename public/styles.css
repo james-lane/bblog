@@ -1644,18 +1644,19 @@ main::before {
 .dash-weight-footer {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 2px;
-  padding-top: 10px;
-  border-top: 1px solid var(--hairline);
+  flex-shrink: 0;
+  gap: 3px;
+  margin: 8px 2px 0;
+  padding: 0 2px;
 }
 
 .dash-weight-note {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
+  text-align: center;
 }
 
 .dash-weight-empty {
