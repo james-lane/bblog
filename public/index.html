@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260507-due-date-growth-baseline" />
+  <link rel="stylesheet" href="/styles.css?v=20260508-fluid-chart-height-2" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -109,12 +109,6 @@
           <button id="dash-next" class="dash-nav-btn" aria-label="Next day">&#x203a;</button>
         </div>
         <div id="dash-milk-chart" class="dash-milk-chart"></div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-header">
-          <span class="dash-card-title">Weight trend</span>
-        </div>
-        <div id="dash-weight-chart" class="dash-weight-chart"></div>
       </div>
     </section>
 
@@ -223,6 +217,16 @@
 
     </section>
 
+    <section id="tab-charts" class="tab-panel">
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <span class="dash-card-title">Weight trend</span>
+          <span id="charts-weight-summary" class="dash-card-summary"></span>
+        </div>
+        <div id="charts-weight-chart" class="dash-weight-chart"></div>
+      </div>
+    </section>
+
     <section id="tab-settings" class="tab-panel">
 
       <div id="settings-setup-card" class="setup-guide hidden">
@@ -323,25 +327,29 @@
   </main>
 
   <nav id="tab-bar" class="tab-bar hidden">
-    <button class="tab-btn active" data-tab="dashboard">
+    <button class="tab-btn active" type="button" data-tab="dashboard">
       <span class="tab-icon">📊</span>
       <span class="tab-label">Dashboard</span>
     </button>
-    <button class="tab-btn" data-tab="log">
+    <button class="tab-btn" type="button" data-tab="log">
       <span class="tab-icon">📋</span>
       <span class="tab-label">Log</span>
     </button>
-    <button class="tab-btn" data-tab="add">
+    <button class="tab-btn tab-btn--add" type="button" data-tab="add" aria-label="Add entry">
       <span class="tab-icon">＋</span>
       <span class="tab-label">Add</span>
     </button>
-    <button class="tab-btn" data-tab="settings">
+    <button class="tab-btn" type="button" data-tab="charts">
+      <span class="tab-icon">📈</span>
+      <span class="tab-label">Charts</span>
+    </button>
+    <button class="tab-btn" type="button" data-tab="settings">
       <span class="tab-icon">⚙️</span>
       <span class="tab-label">Settings</span>
     </button>
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260507-due-date-growth-baseline"></script>
+  <script src="/app.js?v=20260508-fluid-chart-height-2"></script>
 </body>
 </html>

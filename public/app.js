@@ -1594,7 +1594,7 @@ let _demoMode = false;
 let _dashOffset = 0;
 let _medEditId = null;
 let _personEdit = null;
-let _selectedWeightPointKey = null;
+let _selectedWeightAgeMonths = null;
 let _weightGrowthSex = selectedWeightGrowthSex();
 let _weightGrowthPercentiles = selectedWeightGrowthPercentiles();
 let _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MAX };
@@ -2888,13 +2888,6 @@ function formatWeightWithGrams(grams) {
   return `${formatWeightLbOz(grams)} (${formatWeightGrams(grams)})`;
 }
 
-function formatWeightDelta(grams) {
-  if (!Number.isFinite(grams) || grams === 0) return 'no change';
-  const sign = grams > 0 ? '+' : '-';
-  const absOunces = Math.round((Math.abs(grams) / GRAMS_PER_OUNCE) * 10) / 10;
-  return `${sign}${formatOunces(absOunces)} oz`;
-}
-
 function formatWeightDate(isoString) {
   const d = new Date(isoString);
   if (!Number.isFinite(d.getTime())) return '';
@@ -3149,31 +3142,16 @@ function weightTrendModel(activeBabies) {
         if (point.ageEstimated) estimatedAgeCount += 1;
         return true;
       });
-      return { baby, points: plottable, loggedPoints: points };
+      return { baby, points: plottable };
     })
     .filter(({ points }) => points.length);
   const allPoints = series.flatMap(({ points }) => points);
-  const pointModels = series.flatMap(({ baby, points, loggedPoints }) =>
-    points.map((point) => {
-      const loggedIndex = loggedPoints.indexOf(point);
-      const previous = loggedIndex > 0 ? loggedPoints[loggedIndex - 1] : null;
-      const delta = previous ? formatWeightDelta(point.grams - previous.grams) : 'first weight';
-      const key = `${baby.id}-${point.timestamp}-${Math.round(point.grams)}`;
-      return { baby, point, delta, key };
-    }),
-  );
-
-  if (!_selectedWeightPointKey || !pointModels.some((model) => model.key === _selectedWeightPointKey)) {
-    const latestPoint = pointModels.reduce((latest, model) => (!latest || model.point.timestamp > latest.point.timestamp ? model : latest), null);
-    _selectedWeightPointKey = latestPoint?.key || null;
-  }
 
   const totalWeights = loggedSeries.reduce((sum, item) => sum + item.points.length, 0);
   return {
     loggedSeries,
     series,
     allPoints,
-    pointModels,
     totalWeights,
     missingAgeCount,
     estimatedAgeCount,
@@ -3210,44 +3188,115 @@ function whoReferenceData(sex, percentile) {
   }));
 }
 
-function formatWeightChartTooltipAge(raw) {
-  if (!raw) return '';
-  if (raw.reference) return formatGrowthAge(raw.x);
-  return raw.ageBaseline === 'dueDate' ? `${formatGrowthAge(raw.x)} corrected age` : `${formatGrowthAge(raw.x)} old`;
-}
-
-function formatWeightPointAge(point) {
-  if (!point) return '';
-  if (point.ageEstimated) return `${formatGrowthAge(point.ageMonths)} from first weight`;
-  if (point.ageBaseline === 'dueDate') return `${formatGrowthAge(point.ageMonths)} corrected age`;
-  return `${formatGrowthAge(point.ageMonths)} old`;
-}
-
 function growthSettingSummary() {
   const sex = weightGrowthSexById(_weightGrowthSex).name;
   const percentiles = weightGrowthPercentileOptions().map((percentile) => percentile.name).join(', ');
   return `${sex} · ${percentiles}`;
 }
 
-function renderWeightSelectedMarkup(model, state) {
-  if (model) {
-    const ageText = formatWeightPointAge(model.point);
+function clampWeightGrowthAge(ageMonths, view = normalizeWeightGrowthView()) {
+  const value = Number(ageMonths);
+  if (!Number.isFinite(value)) return null;
+  return Math.max(view.min, Math.min(view.max, value));
+}
+
+function defaultWeightSelectionAge(model, view = normalizeWeightGrowthView()) {
+  const visiblePoints = model.allPoints.filter((point) => point.ageMonths >= view.min && point.ageMonths <= view.max);
+  const latestPoint = visiblePoints.reduce((latest, point) => (!latest || point.timestamp > latest.timestamp ? point : latest), null);
+  return latestPoint?.ageMonths ?? view.max;
+}
+
+function selectedWeightAgeForModel(model) {
+  const view = normalizeWeightGrowthView();
+  const selectedAge = clampWeightGrowthAge(_selectedWeightAgeMonths, view);
+  _selectedWeightAgeMonths = selectedAge ?? defaultWeightSelectionAge(model, view);
+  return _selectedWeightAgeMonths;
+}
+
+function weightAtAge(points, ageMonths) {
+  const ordered = [...points]
+    .filter((point) => Number.isFinite(point.ageMonths) && Number.isFinite(point.grams))
+    .sort((a, b) => a.ageMonths - b.ageMonths);
+  if (!ordered.length || !Number.isFinite(ageMonths)) return null;
+
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+  const epsilon = 0.005;
+  if (ordered.length === 1) return { grams: first.grams, mode: 'single', point: first };
+  if (ageMonths <= first.ageMonths) {
+    return { grams: first.grams, mode: Math.abs(ageMonths - first.ageMonths) <= epsilon ? 'exact' : 'before', point: first };
+  }
+  if (ageMonths >= last.ageMonths) {
+    return { grams: last.grams, mode: Math.abs(ageMonths - last.ageMonths) <= epsilon ? 'exact' : 'after', point: last };
+  }
+
+  for (let i = 1; i < ordered.length; i++) {
+    const previous = ordered[i - 1];
+    const next = ordered[i];
+    if (Math.abs(ageMonths - previous.ageMonths) <= epsilon) return { grams: previous.grams, mode: 'exact', point: previous };
+    if (Math.abs(ageMonths - next.ageMonths) <= epsilon) return { grams: next.grams, mode: 'exact', point: next };
+    if (ageMonths > previous.ageMonths && ageMonths < next.ageMonths) {
+      const span = next.ageMonths - previous.ageMonths;
+      const ratio = span > 0 ? (ageMonths - previous.ageMonths) / span : 0;
+      return {
+        grams: previous.grams + (next.grams - previous.grams) * ratio,
+        mode: 'trend',
+        from: previous,
+        to: next,
+      };
+    }
+  }
+
+  return null;
+}
+
+function weightReadingMeta(reading) {
+  if (!reading) return 'No plotted weight';
+  if (reading.mode === 'trend') return `${formatGrowthAge(reading.from.ageMonths)}-${formatGrowthAge(reading.to.ageMonths)} trend`;
+  if (reading.mode === 'before') return `First weight · ${formatWeightDate(reading.point.timestamp)}`;
+  if (reading.mode === 'after') return `Latest weight · ${formatWeightDate(reading.point.timestamp)}`;
+  if (reading.mode === 'single') return `Only logged weight · ${formatWeightDate(reading.point.timestamp)}`;
+  return `Logged ${formatWeightDate(reading.point.timestamp)}`;
+}
+
+function renderWeightSelectedMarkup(model, selectedAge) {
+  const ageText = Number.isFinite(selectedAge) ? formatGrowthAge(selectedAge) : '';
+  const readings = model.series
+    .map(({ baby, points }) => ({ baby, reading: weightAtAge(points, selectedAge) }))
+    .filter(({ reading }) => reading);
+
+  if (readings.length) {
     return `
-      <div id="dash-weight-selected" class="dash-weight-selected" style="--baby-colour:${model.baby.colour}">
-        <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
-        <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(model.point.grams))}</span>
-        <span class="dash-weight-selected-meta">${escapeHtml(ageText)} · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>
+      <div id="dash-weight-selected" class="dash-weight-selected dash-weight-readout" aria-live="polite">
+        <div class="dash-weight-readout-head">
+          <span class="dash-weight-readout-label">Selected age</span>
+          <span class="dash-weight-readout-age">${escapeHtml(ageText)}</span>
+        </div>
+        <div class="dash-weight-readout-grid">
+          ${readings.map(({ baby, reading }) => `
+            <div class="dash-weight-readout-item" style="--baby-colour:${baby.colour}">
+              <span class="dash-weight-readout-swatch" aria-hidden="true"></span>
+              <span class="dash-weight-selected-name">${escapeHtml(baby.name)}</span>
+              <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(reading.grams))}</span>
+              <span class="dash-weight-selected-meta">${escapeHtml(weightReadingMeta(reading))}</span>
+            </div>
+          `).join('')}
+        </div>
       </div>`;
   }
 
-  const message = state.totalWeights
-    ? state.missingAgeCount
+  const message = model.totalWeights
+    ? model.missingAgeCount
       ? 'Add birth or due dates in Settings to plot logged weights by age.'
       : 'Logged weights are outside the birth-to-24-month chart.'
     : 'No weights logged yet.';
   return `
-    <div id="dash-weight-selected" class="dash-weight-selected dash-weight-selected--empty">
-      <span class="dash-weight-selected-name">WHO weight-for-age</span>
+    <div id="dash-weight-selected" class="dash-weight-selected dash-weight-selected--empty dash-weight-readout" aria-live="polite">
+      <div class="dash-weight-readout-head">
+        <span class="dash-weight-readout-label">Selected age</span>
+        <span class="dash-weight-readout-age">${escapeHtml(ageText)}</span>
+      </div>
+      <span class="dash-weight-selected-name">Weight chart</span>
       <span class="dash-weight-selected-meta">${escapeHtml(message)}</span>
     </div>`;
 }
@@ -3267,77 +3316,82 @@ function renderWeightZoomControls() {
 
 function renderWeightTrend(activeBabies) {
   const model = weightTrendModel(activeBabies);
-  const { loggedSeries, pointModels } = model;
-  const selectedPoint = pointModels.find((pointModel) => pointModel.key === _selectedWeightPointKey) || pointModels[0];
-  const legend = loggedSeries
-    .map(
-      ({ baby, points }) => {
-        const latest = points[points.length - 1];
-        const previous = points[points.length - 2];
-        const delta = previous ? formatWeightDelta(latest.grams - previous.grams) : 'first weight';
-        return `
-        <span class="dash-weight-legend-item">
-          <span class="dash-weight-legend-swatch" style="--baby-colour:${baby.colour}"></span>
-          <span class="dash-weight-legend-copy">
-            <span class="dash-weight-legend-name">${escapeHtml(baby.name)}</span>
-            <span class="dash-weight-legend-detail">${escapeHtml(formatWeightWithGrams(latest.grams))} · ${escapeHtml(delta)}</span>
-          </span>
-        </span>`;
-      },
-    )
-    .join('');
-  const dobNote = model.missingAgeCount
-    ? `<div class="dash-weight-note">${escapeHtml(model.missingAgeCount === 1 ? '1 logged weight needs a birth or due date to plot by age.' : `${model.missingAgeCount} logged weights need birth or due dates to plot by age.`)}</div>`
-    : '';
-  const estimateNote = model.estimatedAgeCount
-    ? `<div class="dash-weight-note dash-weight-note--estimated">${escapeHtml(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth or due date is set.' : "Using each baby's first logged weight as 0m until birth or due dates are set.")}</div>`
-    : '';
+  const selectedAge = selectedWeightAgeForModel(model);
+  const chartNotices = [];
+  if (model.missingAgeCount) {
+    chartNotices.push(model.missingAgeCount === 1 ? '1 logged weight needs a birth or due date to plot by age.' : `${model.missingAgeCount} logged weights need birth or due dates to plot by age.`);
+  }
+  if (model.estimatedAgeCount) {
+    chartNotices.push(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth or due date is set.' : "Using each baby's first logged weight as 0m until birth or due dates are set.");
+  }
   const dueDateBabies = activeBabies.filter((baby) => normalizeDateOnly(baby.dueDate));
-  const dueDateNote = dueDateBabies.length
-    ? `<div class="dash-weight-note">${escapeHtml(`Using due date as 0m on the growth chart for ${dueDateBabies.map((baby) => baby.name).join(', ')}.`)}</div>`
-    : '';
-  const beforeRangeNote = model.beforeRangeCount
-    ? `<div class="dash-weight-note">${escapeHtml(`${model.beforeRangeCount} weight${model.beforeRangeCount === 1 ? '' : 's'} before the growth chart baseline ${model.beforeRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
-    : '';
-  const afterRangeNote = model.afterRangeCount
-    ? `<div class="dash-weight-note">${escapeHtml(`${model.afterRangeCount} weight${model.afterRangeCount === 1 ? '' : 's'} after 24 months ${model.afterRangeCount === 1 ? 'is' : 'are'} hidden.`)}</div>`
+  if (dueDateBabies.length) {
+    chartNotices.push(`Using due date as 0m on the growth chart for ${dueDateBabies.map((baby) => baby.name).join(', ')}.`);
+  }
+  if (model.beforeRangeCount) {
+    chartNotices.push(`${model.beforeRangeCount} weight${model.beforeRangeCount === 1 ? '' : 's'} before the growth chart baseline ${model.beforeRangeCount === 1 ? 'is' : 'are'} hidden.`);
+  }
+  if (model.afterRangeCount) {
+    chartNotices.push(`${model.afterRangeCount} weight${model.afterRangeCount === 1 ? '' : 's'} after 24 months ${model.afterRangeCount === 1 ? 'is' : 'are'} hidden.`);
+  }
+  const chartFooter = chartNotices.length
+    ? `<div class="dash-weight-footer" aria-label="Weight chart notices">${chartNotices.map((notice) => `<p class="dash-weight-note">${escapeHtml(notice)}</p>`).join('')}</div>`
     : '';
 
   return `
     <div class="dash-weight-plot">
-      <div class="dash-weight-chart-meta">
-        <span>WHO weight-for-age</span>
-        <span>${escapeHtml(growthSettingSummary())}</span>
-      </div>
-      ${renderWeightZoomControls()}
       <div class="dash-weight-scroll" aria-label="Scrollable weight chart">
         <div class="dash-weight-canvas-wrap">
           <canvas id="dash-weight-canvas" class="dash-weight-canvas" width="720" height="360"></canvas>
         </div>
       </div>
-      ${renderWeightSelectedMarkup(selectedPoint, model)}
-      ${dueDateNote}
-      ${dobNote}
-      ${estimateNote}
-      ${beforeRangeNote}
-      ${afterRangeNote}
-      <div class="dash-weight-legend">${legend}</div>
+      ${renderWeightSelectedMarkup(model, selectedAge)}
+      ${renderWeightZoomControls()}
+      ${chartFooter}
     </div>`;
 }
 
-function updateDashboardWeightSelection(model) {
-  if (!model) return;
-  _selectedWeightPointKey = model.key;
+function updateWeightAgeSelection(model, ageMonths) {
+  const selectedAge = clampWeightGrowthAge(ageMonths);
+  if (selectedAge == null) return;
+  _selectedWeightAgeMonths = selectedAge;
+
   const selected = document.getElementById('dash-weight-selected');
-  if (!selected) return;
-  selected.style.setProperty('--baby-colour', model.baby.colour || 'var(--accent)');
-  selected.classList.remove('dash-weight-selected--empty');
-  const ageText = formatWeightPointAge(model.point);
-  selected.innerHTML = `
-    <span class="dash-weight-selected-name">${escapeHtml(model.baby.name)}</span>
-    <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(model.point.grams))}</span>
-    <span class="dash-weight-selected-meta">${escapeHtml(ageText)} · ${escapeHtml(formatTime(new Date(model.point.timestamp).toISOString()))} · ${escapeHtml(model.delta)}</span>`;
+  if (selected) selected.outerHTML = renderWeightSelectedMarkup(model, selectedAge);
+
+  if (weightTrendChart?.options?.plugins?.weightSelectionLine) {
+    weightTrendChart.options.plugins.weightSelectionLine.age = selectedAge;
+    weightTrendChart.update('none');
+  }
 }
+
+const weightSelectionLinePlugin = {
+  id: 'weightSelectionLine',
+  afterDatasetsDraw(chart, args, options) {
+    const age = Number(options?.age);
+    const xScale = chart.scales?.x;
+    if (!Number.isFinite(age) || !xScale) return;
+
+    const x = xScale.getPixelForValue(age);
+    const { chartArea, ctx } = chart;
+    if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = options?.color || '#666';
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = options?.color || '#666';
+    ctx.beginPath();
+    ctx.arc(x, chartArea.top + 7, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  },
+};
 
 function wireWeightZoomControls() {
   document.querySelectorAll('[data-weight-zoom]').forEach((btn) => {
@@ -3347,20 +3401,26 @@ function wireWeightZoomControls() {
       if (btn.dataset.weightZoom === 'left') panWeightGrowthView('left');
       if (btn.dataset.weightZoom === 'right') panWeightGrowthView('right');
       if (btn.dataset.weightZoom === 'reset') resetWeightGrowthView();
-      renderDashboard();
+      renderCharts();
     });
   });
 }
 
-function initWeightTrendChart(activeBabies) {
+function destroyWeightTrendChart() {
   if (weightTrendChart) {
     weightTrendChart.destroy();
     weightTrendChart = null;
   }
+}
+
+function initWeightTrendChart(activeBabies) {
+  destroyWeightTrendChart();
   const canvas = document.getElementById('dash-weight-canvas');
   if (!canvas || !globalThis.Chart) return;
 
-  const { series, allPoints, pointModels } = weightTrendModel(activeBabies);
+  const model = weightTrendModel(activeBabies);
+  const { series, allPoints } = model;
+  const selectedAge = selectedWeightAgeForModel(model);
   const view = normalizeWeightGrowthView();
   const referenceRows = whoReferenceRows();
   const selectedReferencePercentiles = weightGrowthPercentileOptions();
@@ -3384,8 +3444,7 @@ function initWeightTrendChart(activeBabies) {
   const chartGridColor = rootStyles.getPropertyValue('--chart-grid').trim() || 'rgba(142, 142, 147, 0.22)';
   const chartTextColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
   const growthLineColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
-  const findModel = (babyId, timestamp, grams) =>
-    pointModels.find((model) => model.baby.id === babyId && model.point.timestamp === timestamp && model.point.grams === grams);
+  const accentColor = rootStyles.getPropertyValue('--accent').trim() || '#666';
   const referenceDatasets = selectedReferencePercentiles.map((percentile) => ({
     label: `${percentile.name} percentile`,
     borderColor: percentile.key === 'p50' ? growthLineColor : chartGridColor,
@@ -3411,18 +3470,15 @@ function initWeightTrendChart(activeBabies) {
     })),
     tension: 0.25,
     borderWidth: 1.8,
-    pointRadius: (ctx) => {
-      const raw = ctx.raw;
-      const model = raw ? findModel(raw.babyId, raw.timestamp, raw.y) : null;
-      return model?.key === _selectedWeightPointKey ? 5 : 3;
-    },
-    pointHoverRadius: 6,
-    pointHitRadius: 14,
+    pointRadius: 3,
+    pointHoverRadius: 3,
+    pointHitRadius: 10,
   }));
 
   weightTrendChart = new Chart(canvas, {
     type: 'line',
     data: { datasets: [...referenceDatasets, ...babyDatasets] },
+    plugins: [weightSelectionLinePlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -3430,15 +3486,8 @@ function initWeightTrendChart(activeBabies) {
       interaction: { mode: 'nearest', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: (items) => formatWeightChartTooltipAge(items[0]?.raw),
-            label: (item) =>
-              item.raw?.reference
-                ? `${item.raw.percentile}: ${formatWeightWithGrams(item.raw.y)}`
-                : `${item.dataset.label}: ${formatWeightWithGrams(item.raw.y)}`,
-          },
-        },
+        tooltip: { enabled: false },
+        weightSelectionLine: { age: selectedAge, color: accentColor },
       },
       scales: {
         x: {
@@ -3463,14 +3512,11 @@ function initWeightTrendChart(activeBabies) {
           grid: { color: chartGridColor },
         },
       },
-      onClick: (event) => {
-        const points = weightTrendChart.getElementsAtEventForMode(event, 'nearest', { intersect: false }, true);
-        const hit = points.find((candidate) => !weightTrendChart.data.datasets[candidate.datasetIndex].data[candidate.index]?.reference);
-        if (!hit) return;
-        const raw = weightTrendChart.data.datasets[hit.datasetIndex].data[hit.index];
-        const model = findModel(raw.babyId, raw.timestamp, raw.y);
-        updateDashboardWeightSelection(model);
-        weightTrendChart.update('none');
+      onClick: (event, elements, chart) => {
+        const { chartArea, scales } = chart;
+        if (!scales?.x || !Number.isFinite(event.x)) return;
+        if (event.x < chartArea.left || event.x > chartArea.right || event.y < chartArea.top || event.y > chartArea.bottom) return;
+        updateWeightAgeSelection(model, scales.x.getValueForPixel(event.x));
       },
     },
   });
@@ -4269,7 +4315,7 @@ function renderGrowthChartSettings() {
     btn.addEventListener('click', () => {
       saveWeightGrowthSex(btn.dataset.growthSex);
       renderGrowthChartSettings();
-      if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard();
+      if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
     });
   });
 
@@ -4279,7 +4325,7 @@ function renderGrowthChartSettings() {
       const next = checked.length ? checked : ['p50'];
       saveWeightGrowthPercentiles(next);
       renderGrowthChartSettings();
-      if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard();
+      if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
     });
   });
 }
@@ -4331,12 +4377,10 @@ function renderDashboard() {
 
   const live = document.getElementById('dash-live-stats');
   const chart = document.getElementById('dash-milk-chart');
-  const weightChart = document.getElementById('dash-weight-chart');
   const activeBabies = babies();
   if (!activeBabies.length) {
     live.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     chart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
-    weightChart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
 
@@ -4403,11 +4447,26 @@ function renderDashboard() {
     })
     .join('');
 
+  refreshDashboardLiveTimes();
+  scheduleDashboardClockRefresh();
+}
+
+function renderCharts() {
+  const weightChart = document.getElementById('charts-weight-chart');
+  if (!weightChart) return;
+  const summary = document.getElementById('charts-weight-summary');
+  if (summary) summary.textContent = growthSettingSummary();
+
+  const activeBabies = babies();
+  if (!activeBabies.length) {
+    destroyWeightTrendChart();
+    weightChart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+    return;
+  }
+
   weightChart.innerHTML = renderWeightTrend(activeBabies);
   initWeightTrendChart(activeBabies);
   wireWeightZoomControls();
-  refreshDashboardLiveTimes();
-  scheduleDashboardClockRefresh();
 }
 
 function refreshDashboardLiveTimes() {
@@ -4457,6 +4516,7 @@ function renderAll() {
   renderMedButtons();
   renderLog();
   renderDashboard();
+  if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
   renderSettings();
   updateUnitLabel();
   updateSaveBtn();
@@ -4472,7 +4532,9 @@ function setActiveTab(tabName) {
   if (tabName === 'log') renderLog();
   if (tabName === 'settings') renderSettings();
   if (tabName === 'dashboard') renderDashboard();
+  if (tabName === 'charts') renderCharts();
   if (tabName !== 'dashboard') clearTimeout(dashboardClockTimer);
+  if (tabName !== 'charts') destroyWeightTrendChart();
 }
 
 async function copyText(text) {
