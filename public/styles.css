@@ -1646,8 +1646,7 @@ main::before {
   flex-direction: column;
   flex-shrink: 0;
   gap: 3px;
-  margin: 8px 2px 0;
-  padding: 0 2px;
+  margin: 4px 0;
 }
 
 .dash-weight-note {

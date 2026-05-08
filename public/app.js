@@ -2187,7 +2187,7 @@ function buildDemoData() {
     users: [{ id: 'demo_parent', name: 'Demo Parent', createdAt: stamp, updatedAt: stamp }],
     babies: [
       { id: 'demo_ava', name: 'Ava', birthDate: daysAgoDate(5), createdAt: stamp, updatedAt: stamp },
-      { id: 'demo_luca', name: 'Luca', birthDate: daysAgoDate(6), createdAt: stamp, updatedAt: stamp },
+      { id: 'demo_luca', name: 'Luca', dueDate: daysAgoDate(6), createdAt: stamp, updatedAt: stamp },
     ],
     medications: [],
     entries: [
