@@ -2235,6 +2235,11 @@ function dateOnlyUtcMs(value) {
   return Date.UTC(year, month - 1, day);
 }
 
+function normalizeTimestamp(value) {
+  const time = new Date(value || '').getTime();
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
 function normalizeData(value) {
   const stamp = nowIso();
   const source = value && typeof value === 'object' ? value : {};
@@ -2251,15 +2256,21 @@ function normalizeData(value) {
       updatedAt: item.updatedAt,
       deletedAt: item.deletedAt || null,
     })),
-    babies: normalizeRecordList(source.babies, (item) => ({
-      id: item.id,
-      name: String(item.name || item.label || '').trim() || 'Baby',
-      birthDate: normalizeDateOnly(item.birthDate || item.dateOfBirth || item.dob),
-      dueDate: normalizeDateOnly(item.dueDate || item.estimatedDueDate || item.edd),
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      deletedAt: item.deletedAt || null,
-    })),
+    babies: normalizeRecordList(source.babies, (item) => {
+      const birthDate = normalizeDateOnly(item.birthDate || item.dateOfBirth || item.dob);
+      const dueDate = normalizeDateOnly(item.dueDate || item.estimatedDueDate || item.edd);
+      return {
+        id: item.id,
+        name: String(item.name || item.label || '').trim() || 'Baby',
+        birthDate,
+        dueDate,
+        birthDateUpdatedAt: normalizeTimestamp(item.birthDateUpdatedAt) || (birthDate ? item.updatedAt : null),
+        dueDateUpdatedAt: normalizeTimestamp(item.dueDateUpdatedAt) || (dueDate ? item.updatedAt : null),
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        deletedAt: item.deletedAt || null,
+      };
+    }),
     medications: normalizeRecordList(source.medications, (item) => ({
       id: item.id,
       label: String(item.label || item.name || '').trim() || 'Medication',
@@ -2389,15 +2400,64 @@ function recordStamp(item) {
   return new Date(item.deletedAt || item.updatedAt || item.createdAt || item.timestamp || 0).getTime() || 0;
 }
 
+function newestRecord(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  const leftStamp = recordStamp(left);
+  const rightStamp = recordStamp(right);
+  if (rightStamp > leftStamp) return right;
+  if (leftStamp > rightStamp) return left;
+  return JSON.stringify(right) > JSON.stringify(left) ? right : left;
+}
+
 function mergeRecordList(left, right) {
   const map = new Map();
   for (const item of [...(left || []), ...(right || [])]) {
     const current = map.get(item.id);
-    if (!current || recordStamp(item) > recordStamp(current)) {
-      map.set(item.id, item);
-    } else if (current && recordStamp(item) === recordStamp(current)) {
-      map.set(item.id, JSON.stringify(item) > JSON.stringify(current) ? item : current);
-    }
+    map.set(item.id, newestRecord(current, item));
+  }
+  return [...map.values()];
+}
+
+function dateFieldStamp(item, field) {
+  const explicitStamp = normalizeTimestamp(item?.[`${field}UpdatedAt`]);
+  if (explicitStamp) return new Date(explicitStamp).getTime();
+  return item?.[field] ? recordStamp(item) : 0;
+}
+
+function mergeBabyDateField(target, left, right, field) {
+  const stampKey = `${field}UpdatedAt`;
+  const leftStamp = dateFieldStamp(left, field);
+  const rightStamp = dateFieldStamp(right, field);
+  let winner = null;
+  if (rightStamp > leftStamp) {
+    winner = right;
+  } else if (leftStamp > rightStamp) {
+    winner = left;
+  } else {
+    const leftValue = normalizeDateOnly(left?.[field]);
+    const rightValue = normalizeDateOnly(right?.[field]);
+    if (leftValue && !rightValue) winner = left;
+    else if (rightValue && !leftValue) winner = right;
+    else winner = newestRecord(left, right);
+  }
+
+  target[field] = normalizeDateOnly(winner?.[field]);
+  target[stampKey] = normalizeTimestamp(winner?.[stampKey]) || (target[field] ? normalizeTimestamp(winner?.updatedAt) : null);
+}
+
+function mergeBabyRecord(left, right) {
+  const merged = { ...newestRecord(left, right) };
+  mergeBabyDateField(merged, left, right, 'birthDate');
+  mergeBabyDateField(merged, left, right, 'dueDate');
+  return merged;
+}
+
+function mergeBabyList(left, right) {
+  const map = new Map();
+  for (const item of [...(left || []), ...(right || [])]) {
+    const current = map.get(item.id);
+    map.set(item.id, current ? mergeBabyRecord(current, item) : item);
   }
   return [...map.values()];
 }
@@ -2414,7 +2474,7 @@ function mergeVaults(localData, remoteData) {
       updatedAt: updatedAt || nowIso(),
     },
     users: mergeRecordList(localData?.users, remoteData?.users),
-    babies: mergeRecordList(localData?.babies, remoteData?.babies),
+    babies: mergeBabyList(localData?.babies, remoteData?.babies),
     medications: mergeRecordList(localData?.medications, remoteData?.medications),
     entries: mergeRecordList(localData?.entries, remoteData?.entries),
   });
@@ -4166,8 +4226,12 @@ async function savePersonForm() {
       if (item) {
         item.name = name;
         if (_personEdit.kind === 'babies') {
+          const previousBirthDate = normalizeDateOnly(item.birthDate);
+          const previousDueDate = normalizeDateOnly(item.dueDate);
           item.birthDate = birthDate;
           item.dueDate = dueDate;
+          if (birthDate !== previousBirthDate) item.birthDateUpdatedAt = stamp;
+          if (dueDate !== previousDueDate) item.dueDateUpdatedAt = stamp;
         }
         item.updatedAt = stamp;
       }
@@ -4182,6 +4246,8 @@ async function savePersonForm() {
       if (_personEdit.kind === 'babies') {
         item.birthDate = birthDate;
         item.dueDate = dueDate;
+        item.birthDateUpdatedAt = birthDate ? stamp : null;
+        item.dueDateUpdatedAt = dueDate ? stamp : null;
       }
       next[_personEdit.kind].push(item);
     }
