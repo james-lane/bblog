@@ -2,11 +2,11 @@ const CACHE_NAME = 'bblog-v66';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260508-chart-footer-spacing',
+  '/styles.css?v=20260508-bump-footer-spacing',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260508-chart-footer-spacing',
-  '/manifest.webmanifest?v=20260508-chart-footer-spacing',
-  '/icon.svg?v=20260508-chart-footer-spacing',
+  '/app.js?v=20260508-bump-footer-spacing',
+  '/manifest.webmanifest?v=20260508-bump-footer-spacing',
+  '/icon.svg?v=20260508-bump-footer-spacing',
 ];
 
 self.addEventListener('install', (event) => {
@@ -21,7 +21,11 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
       ),
   );
   self.clients.claim();
@@ -39,7 +43,9 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put('/index.html', copy));
           return response;
         })
         .catch(() => caches.match('/index.html')),
