@@ -2,10 +2,10 @@ const CACHE_NAME = 'bblog-v67';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260509-dashboard-milk-ranges',
+  '/styles.css?v=20260509-logo-update',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260509-dashboard-milk-ranges',
-  '/manifest.webmanifest?v=20260509-dashboard-milk-ranges',
+  '/app.js?v=20260509-logo-update',
+  '/manifest.webmanifest?v=20260509-logo-update',
   '/icon.svg?v=20260509-logo-update',
 ];
 
