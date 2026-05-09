@@ -5249,7 +5249,7 @@ function renderDashboard() {
           <div class="dash-milk-count">${escapeHtml(feedsText)}</div>
         </div>
         <div class="dash-milk-values">
-          <div class="dash-milk-value dash-milk-value--total">
+          <div class="dash-milk-value">
             <span class="dash-milk-label">Total</span>
             <span class="dash-milk-number">${escapeHtml(formatMilkAmount(stat.total))}</span>
           </div>
