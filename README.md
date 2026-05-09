@@ -22,6 +22,14 @@ npm run dev
 
 Open `http://localhost:4173`. Local development stores encrypted cloud vault files in `.local/vaults`, so you can test sync without a Vercel account.
 
+When shipping UI or service worker updates, bump PWA caches:
+
+```bash
+npm run bump:caches
+```
+
+This increments `CACHE_NAME` in `public/sw.js` and refreshes cache-bust query tokens in `public/sw.js` and `public/index.html`.
+
 ## Deploy on Vercel
 
 Use the deploy button above, or set it up manually:

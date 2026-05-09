@@ -514,7 +514,6 @@ main::before {
 
 .tab-btn {
   min-width: 0;
-  min-height: 64px;
   background: none;
   border: none;
   display: flex;
