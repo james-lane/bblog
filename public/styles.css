@@ -521,7 +521,7 @@ main::before {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 6px 0;
+  padding: 10px 0;
   color: var(--text-muted);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -539,9 +539,9 @@ main::before {
 }
 
 .tab-btn--add {
-  gap: 2px;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  gap: 3px;
+  padding-top: 6px;
+  padding-bottom: 8px;
 }
 
 .tab-btn--add .tab-icon {
