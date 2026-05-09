@@ -8,7 +8,14 @@ const MILK_UNIT = 'ml';
 const WEIGHT_UNIT = 'g';
 const GRAMS_PER_OUNCE = 28.349523125;
 const OUNCES_PER_POUND = 16;
-const BABY_COLOURS = ['#0057d9', '#c2410c', '#087f5b', '#c2255c', '#7048e8', '#0b7285'];
+const BABY_COLOURS = [
+  '#0057d9',
+  '#c2410c',
+  '#087f5b',
+  '#c2255c',
+  '#7048e8',
+  '#0b7285',
+];
 const SYNC_RETRY_DELAY_MS = 3000;
 const SYNC_FOREGROUND_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const INSTALL_DISMISSED_KEY = 'install-suggestion-dismissed-at';
@@ -53,9 +60,24 @@ const WHO_WEIGHT_PERCENTILES = [
 ];
 const DEFAULT_WEIGHT_GROWTH_PERCENTILES = ['p3', 'p15', 'p50', 'p85', 'p97'];
 const MILK_STATS_RANGE_OPTIONS = [
-  { id: '24h', name: '24h', summary: 'Past 24h', durationMs: 24 * 60 * 60 * 1000 },
-  { id: '1w', name: '1w', summary: 'Past week', durationMs: 7 * 24 * 60 * 60 * 1000 },
-  { id: '1m', name: '1m', summary: 'Past month', durationMs: 30 * 24 * 60 * 60 * 1000 },
+  {
+    id: '24h',
+    name: '24h',
+    summary: 'Past 24h',
+    durationMs: 24 * 60 * 60 * 1000,
+  },
+  {
+    id: '1w',
+    name: '1w',
+    summary: 'Past week',
+    durationMs: 7 * 24 * 60 * 60 * 1000,
+  },
+  {
+    id: '1m',
+    name: '1m',
+    summary: 'Past month',
+    durationMs: 30 * 24 * 60 * 60 * 1000,
+  },
   { id: 'custom', name: 'Dates', summary: 'Custom dates' },
 ];
 // Source: WHO Child Growth Standards expanded tables for constructing national health cards.
@@ -1606,7 +1628,10 @@ let _personEdit = null;
 let _selectedWeightAgeMonths = null;
 let _weightGrowthSex = selectedWeightGrowthSex();
 let _weightGrowthPercentiles = selectedWeightGrowthPercentiles();
-let _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MIN + DEFAULT_WEIGHT_GROWTH_VIEW_MONTHS };
+let _weightGrowthView = {
+  min: WEIGHT_GROWTH_AGE_MIN,
+  max: WEIGHT_GROWTH_AGE_MIN + DEFAULT_WEIGHT_GROWTH_VIEW_MONTHS,
+};
 let weightTrendChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
@@ -1631,7 +1656,9 @@ function requireVaultCrypto() {
   const cryptoApi = requireRandomCrypto();
   const subtle = cryptoApi.subtle || cryptoApi.webkitSubtle;
   if (!globalThis.isSecureContext || !subtle) {
-    throw new Error('bblog needs a secure HTTPS browser context to create or unlock an encrypted vault.');
+    throw new Error(
+      'bblog needs a secure HTTPS browser context to create or unlock an encrypted vault.',
+    );
   }
   return { cryptoApi, subtle };
 }
@@ -1641,28 +1668,36 @@ function nowIso() {
 }
 
 function demoModeRequested() {
-  return new URLSearchParams(globalThis.location?.search || '').get('demo') === '1';
+  return (
+    new URLSearchParams(globalThis.location?.search || '').get('demo') === '1'
+  );
 }
 
 function isStandaloneDisplay() {
   return Boolean(
     globalThis.matchMedia?.('(display-mode: standalone)').matches ||
-      globalThis.matchMedia?.('(display-mode: fullscreen)').matches ||
-      globalThis.matchMedia?.('(display-mode: minimal-ui)').matches ||
-      globalThis.navigator?.standalone === true,
+    globalThis.matchMedia?.('(display-mode: fullscreen)').matches ||
+    globalThis.matchMedia?.('(display-mode: minimal-ui)').matches ||
+    globalThis.navigator?.standalone === true,
   );
 }
 
 function isIosLike() {
   const ua = navigator.userAgent || '';
   const platform = navigator.platform || '';
-  return /iphone|ipad|ipod/i.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return (
+    /iphone|ipad|ipod/i.test(ua) ||
+    (platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
 }
 
 function installDismissedRecently() {
   try {
     const dismissedAt = Number(localStorage.getItem(INSTALL_DISMISSED_KEY));
-    return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < INSTALL_DISMISS_DURATION_MS;
+    return (
+      Number.isFinite(dismissedAt) &&
+      Date.now() - dismissedAt < INSTALL_DISMISS_DURATION_MS
+    );
   } catch {
     return false;
   }
@@ -1677,20 +1712,31 @@ function rememberInstallDismissal() {
 }
 
 function themeById(themeId) {
-  return APP_THEMES.find((theme) => theme.id === themeId) || APP_THEMES.find((theme) => theme.id === DEFAULT_THEME_ID);
+  return (
+    APP_THEMES.find((theme) => theme.id === themeId) ||
+    APP_THEMES.find((theme) => theme.id === DEFAULT_THEME_ID)
+  );
 }
 
 function colorModeById(colorMode) {
-  return COLOR_MODES.find((mode) => mode.id === colorMode) || COLOR_MODES.find((mode) => mode.id === DEFAULT_COLOR_MODE);
+  return (
+    COLOR_MODES.find((mode) => mode.id === colorMode) ||
+    COLOR_MODES.find((mode) => mode.id === DEFAULT_COLOR_MODE)
+  );
 }
 
 function weightGrowthSexById(sex) {
-  return WEIGHT_GROWTH_SEXES.find((item) => item.id === sex) || WEIGHT_GROWTH_SEXES.find((item) => item.id === DEFAULT_WEIGHT_GROWTH_SEX);
+  return (
+    WEIGHT_GROWTH_SEXES.find((item) => item.id === sex) ||
+    WEIGHT_GROWTH_SEXES.find((item) => item.id === DEFAULT_WEIGHT_GROWTH_SEX)
+  );
 }
 
 function selectedThemeId() {
   try {
-    return themeById(localStorage.getItem(THEME_STORAGE_KEY))?.id || DEFAULT_THEME_ID;
+    return (
+      themeById(localStorage.getItem(THEME_STORAGE_KEY))?.id || DEFAULT_THEME_ID
+    );
   } catch {
     return DEFAULT_THEME_ID;
   }
@@ -1698,7 +1744,10 @@ function selectedThemeId() {
 
 function selectedColorMode() {
   try {
-    return colorModeById(localStorage.getItem(COLOR_MODE_STORAGE_KEY))?.id || DEFAULT_COLOR_MODE;
+    return (
+      colorModeById(localStorage.getItem(COLOR_MODE_STORAGE_KEY))?.id ||
+      DEFAULT_COLOR_MODE
+    );
   } catch {
     return DEFAULT_COLOR_MODE;
   }
@@ -1706,7 +1755,10 @@ function selectedColorMode() {
 
 function selectedWeightGrowthSex() {
   try {
-    return weightGrowthSexById(localStorage.getItem(WEIGHT_GROWTH_SEX_STORAGE_KEY))?.id || DEFAULT_WEIGHT_GROWTH_SEX;
+    return (
+      weightGrowthSexById(localStorage.getItem(WEIGHT_GROWTH_SEX_STORAGE_KEY))
+        ?.id || DEFAULT_WEIGHT_GROWTH_SEX
+    );
   } catch {
     return DEFAULT_WEIGHT_GROWTH_SEX;
   }
@@ -1718,13 +1770,20 @@ function weightGrowthPercentileByKey(key) {
 
 function normalizeWeightGrowthPercentiles(keys) {
   const source = Array.isArray(keys) ? keys : [];
-  const selected = source.filter((key, index) => weightGrowthPercentileByKey(key) && source.indexOf(key) === index);
+  const selected = source.filter(
+    (key, index) =>
+      weightGrowthPercentileByKey(key) && source.indexOf(key) === index,
+  );
   return selected.length ? selected : [...DEFAULT_WEIGHT_GROWTH_PERCENTILES];
 }
 
 function selectedWeightGrowthPercentiles() {
   try {
-    return normalizeWeightGrowthPercentiles(JSON.parse(localStorage.getItem(WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY) || '[]'));
+    return normalizeWeightGrowthPercentiles(
+      JSON.parse(
+        localStorage.getItem(WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY) || '[]',
+      ),
+    );
   } catch {
     return [...DEFAULT_WEIGHT_GROWTH_PERCENTILES];
   }
@@ -1743,7 +1802,10 @@ function saveWeightGrowthSex(sex) {
 function saveWeightGrowthPercentiles(keys) {
   _weightGrowthPercentiles = normalizeWeightGrowthPercentiles(keys);
   try {
-    localStorage.setItem(WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY, JSON.stringify(_weightGrowthPercentiles));
+    localStorage.setItem(
+      WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY,
+      JSON.stringify(_weightGrowthPercentiles),
+    );
   } catch {
     /* ignore */
   }
@@ -1751,28 +1813,46 @@ function saveWeightGrowthPercentiles(keys) {
 }
 
 function currentColorMode() {
-  return colorModeById(document.documentElement.dataset.colorMode || selectedColorMode()).id;
+  return colorModeById(
+    document.documentElement.dataset.colorMode || selectedColorMode(),
+  ).id;
 }
 
 function resolvedColorMode(colorMode = currentColorMode()) {
   const safeMode = colorModeById(colorMode).id;
   if (safeMode !== 'system') return safeMode;
-  return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches
+    ? 'dark'
+    : 'light';
 }
 
 function activeThemeColor(theme, colorMode = selectedColorMode()) {
-  return resolvedColorMode(colorMode) === 'dark' ? theme.darkThemeColor : theme.lightThemeColor;
+  return resolvedColorMode(colorMode) === 'dark'
+    ? theme.darkThemeColor
+    : theme.lightThemeColor;
 }
 
 function themeMetaColors(theme, colorMode = selectedColorMode()) {
   const safeMode = colorModeById(colorMode).id;
   if (safeMode === 'light') {
-    return { light: theme.lightThemeColor, dark: theme.lightThemeColor, active: theme.lightThemeColor };
+    return {
+      light: theme.lightThemeColor,
+      dark: theme.lightThemeColor,
+      active: theme.lightThemeColor,
+    };
   }
   if (safeMode === 'dark') {
-    return { light: theme.darkThemeColor, dark: theme.darkThemeColor, active: theme.darkThemeColor };
+    return {
+      light: theme.darkThemeColor,
+      dark: theme.darkThemeColor,
+      active: theme.darkThemeColor,
+    };
   }
-  return { light: theme.lightThemeColor, dark: theme.darkThemeColor, active: activeThemeColor(theme, safeMode) };
+  return {
+    light: theme.lightThemeColor,
+    dark: theme.darkThemeColor,
+    active: activeThemeColor(theme, safeMode),
+  };
 }
 
 function reinsertHeadMeta(metaUpdates) {
@@ -1817,23 +1897,38 @@ function updatePwaSafeAreaColor(color) {
 }
 
 function updateThemeMeta(theme, colorMode = selectedColorMode()) {
-  const lightMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: light)"]');
-  const darkMeta = document.querySelector('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]');
-  const activeMeta = document.querySelector('meta[name="theme-color"][data-app-theme-color]');
+  const lightMeta = document.querySelector(
+    'meta[name="theme-color"][media="(prefers-color-scheme: light)"]',
+  );
+  const darkMeta = document.querySelector(
+    'meta[name="theme-color"][media="(prefers-color-scheme: dark)"]',
+  );
+  const activeMeta = document.querySelector(
+    'meta[name="theme-color"][data-app-theme-color]',
+  );
   const schemeMeta = document.querySelector('meta[name="color-scheme"]');
-  const statusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  const statusMeta = document.querySelector(
+    'meta[name="apple-mobile-web-app-status-bar-style"]',
+  );
   const metaColors = themeMetaColors(theme, colorMode);
   reinsertHeadMeta([
     { meta: lightMeta, content: metaColors.light },
     { meta: darkMeta, content: metaColors.dark },
     { meta: activeMeta, content: metaColors.active },
-    { meta: statusMeta, content: 'black-translucent' },
+    { meta: statusMeta, content: 'default' },
   ]);
-  if (schemeMeta) schemeMeta.setAttribute('content', colorMode === 'system' ? 'light dark' : colorMode);
+  if (schemeMeta)
+    schemeMeta.setAttribute(
+      'content',
+      colorMode === 'system' ? 'light dark' : colorMode,
+    );
   updatePwaSafeAreaColor(metaColors.active);
 }
 
-function applyAppearance({ themeId = selectedThemeId(), colorMode = selectedColorMode() } = {}) {
+function applyAppearance({
+  themeId = selectedThemeId(),
+  colorMode = selectedColorMode(),
+} = {}) {
   const theme = themeById(themeId);
   const mode = colorModeById(colorMode);
   document.documentElement.dataset.theme = theme.id;
@@ -1847,7 +1942,10 @@ function applyTheme(themeId = selectedThemeId()) {
 }
 
 function saveThemeSelection(themeId) {
-  const safeThemeId = applyAppearance({ themeId, colorMode: selectedColorMode() }).themeId;
+  const safeThemeId = applyAppearance({
+    themeId,
+    colorMode: selectedColorMode(),
+  }).themeId;
   try {
     localStorage.setItem(THEME_STORAGE_KEY, safeThemeId);
   } catch {
@@ -1857,7 +1955,10 @@ function saveThemeSelection(themeId) {
 }
 
 function saveColorModeSelection(colorMode) {
-  const safeColorMode = applyAppearance({ themeId: currentTheme().id, colorMode }).colorMode;
+  const safeColorMode = applyAppearance({
+    themeId: currentTheme().id,
+    colorMode,
+  }).colorMode;
   try {
     localStorage.setItem(COLOR_MODE_STORAGE_KEY, safeColorMode);
   } catch {
@@ -1873,7 +1974,11 @@ function currentTheme() {
 function currentBabyColours() {
   const palette = currentTheme().babyColours;
   if (Array.isArray(palette)) return palette;
-  return palette?.[resolvedColorMode(currentColorMode())] || palette?.light || BABY_COLOURS;
+  return (
+    palette?.[resolvedColorMode(currentColorMode())] ||
+    palette?.light ||
+    BABY_COLOURS
+  );
 }
 
 function rerenderAfterAppearanceChange() {
@@ -1915,7 +2020,9 @@ function renderThemeOptions() {
   const el = document.getElementById('theme-options');
   if (!el) return;
 
-  const currentThemeId = themeById(document.documentElement.dataset.theme || selectedThemeId()).id;
+  const currentThemeId = themeById(
+    document.documentElement.dataset.theme || selectedThemeId(),
+  ).id;
   el.innerHTML = APP_THEMES.map(
     (theme) => `
       <button
@@ -1953,7 +2060,8 @@ function handleSystemColorSchemeChange() {
 }
 
 function installSuggestionDetail() {
-  if (deferredInstallPrompt) return 'Open it from your Home Screen in a standalone app view.';
+  if (deferredInstallPrompt)
+    return 'Open it from your Home Screen in a standalone app view.';
   if (isIosLike()) return 'In Safari, use Share, then Add to Home Screen.';
   return 'Use your browser menu to add bblog to your Home Screen.';
 }
@@ -1964,7 +2072,10 @@ function updateInstallSuggestion() {
   const actionBtn = document.getElementById('install-action-btn');
   if (!banner || !detail || !actionBtn) return;
 
-  const shouldShow = !isStandaloneDisplay() && !_installSuggestionDismissed && !installDismissedRecently();
+  const shouldShow =
+    !isStandaloneDisplay() &&
+    !_installSuggestionDismissed &&
+    !installDismissedRecently();
   banner.classList.toggle('hidden', !shouldShow);
   if (!shouldShow) return;
 
@@ -1979,7 +2090,11 @@ function dismissInstallSuggestion() {
 }
 
 function uid(prefix = '') {
-  return prefix + Date.now().toString(36) + requireRandomCrypto().getRandomValues(new Uint32Array(1))[0].toString(36);
+  return (
+    prefix +
+    Date.now().toString(36) +
+    requireRandomCrypto().getRandomValues(new Uint32Array(1))[0].toString(36)
+  );
 }
 
 function openDb() {
@@ -2062,7 +2177,9 @@ async function ensureDeviceId() {
 }
 
 function normalizeAccessKey(accessKey) {
-  return String(accessKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return String(accessKey || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 async function sha256Hex(value) {
@@ -2112,7 +2229,11 @@ async function encryptVault(plainData) {
   requireRandomCrypto().getRandomValues(iv);
   const plaintext = enc.encode(JSON.stringify(normalizeData(plainData)));
   const { subtle } = requireVaultCrypto();
-  const ciphertext = await subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const ciphertext = await subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    plaintext,
+  );
   return {
     version: 1,
     familyId: session.familyId,
@@ -2131,7 +2252,11 @@ async function encryptVault(plainData) {
 }
 
 async function decryptVault(envelope) {
-  if (!envelope?.kdf?.salt || !envelope?.cipher?.iv || !envelope?.cipher?.data) {
+  if (
+    !envelope?.kdf?.salt ||
+    !envelope?.cipher?.iv ||
+    !envelope?.cipher?.data
+  ) {
     throw new Error('Cloud vault is not a supported encrypted bblog vault.');
   }
   if (envelope.familyId && envelope.familyId !== session.familyId) {
@@ -2187,32 +2312,160 @@ function buildDemoData() {
   const now = Date.now();
   const stamp = nowIso();
   const hoursAgo = (hours) => new Date(now - hours * 3600000).toISOString();
-  const daysAgoDate = (days) => new Date(now - days * 86400000).toISOString().slice(0, 10);
+  const daysAgoDate = (days) =>
+    new Date(now - days * 86400000).toISOString().slice(0, 10);
 
   return normalizeData({
     schemaVersion: 1,
     meta: { createdAt: stamp, updatedAt: stamp },
-    users: [{ id: 'demo_parent', name: 'Demo Parent', createdAt: stamp, updatedAt: stamp }],
+    users: [
+      {
+        id: 'demo_parent',
+        name: 'Demo Parent',
+        createdAt: stamp,
+        updatedAt: stamp,
+      },
+    ],
     babies: [
-      { id: 'demo_ava', name: 'Ava', birthDate: daysAgoDate(5), createdAt: stamp, updatedAt: stamp },
-      { id: 'demo_luca', name: 'Luca', dueDate: daysAgoDate(6), createdAt: stamp, updatedAt: stamp },
+      {
+        id: 'demo_ava',
+        name: 'Ava',
+        birthDate: daysAgoDate(5),
+        createdAt: stamp,
+        updatedAt: stamp,
+      },
+      {
+        id: 'demo_luca',
+        name: 'Luca',
+        dueDate: daysAgoDate(6),
+        createdAt: stamp,
+        updatedAt: stamp,
+      },
     ],
     medications: [],
     entries: [
-      { id: 'demo_ava_feed_1', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 90, unit: 'ml', timestamp: hoursAgo(1.25) },
-      { id: 'demo_ava_feed_2', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 120, unit: 'ml', timestamp: hoursAgo(5.5) },
-      { id: 'demo_ava_feed_3', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 75, unit: 'ml', timestamp: hoursAgo(12) },
-      { id: 'demo_ava_feed_4', type: 'milk', baby: 'demo_ava', user: 'demo_parent', amount: 105, unit: 'ml', timestamp: hoursAgo(27) },
-      { id: 'demo_ava_weight_1', type: 'weight', baby: 'demo_ava', user: 'demo_parent', amount: 3650, unit: 'g', timestamp: hoursAgo(6) },
-      { id: 'demo_ava_weight_2', type: 'weight', baby: 'demo_ava', user: 'demo_parent', amount: 3490, unit: 'g', timestamp: hoursAgo(72) },
-      { id: 'demo_ava_poo_1', type: 'poo', baby: 'demo_ava', user: 'demo_parent', timestamp: hoursAgo(3.25) },
-      { id: 'demo_luca_feed_1', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 110, unit: 'ml', timestamp: hoursAgo(2.1) },
-      { id: 'demo_luca_feed_2', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 140, unit: 'ml', timestamp: hoursAgo(9) },
-      { id: 'demo_luca_feed_3', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 95, unit: 'ml', timestamp: hoursAgo(18) },
-      { id: 'demo_luca_feed_4', type: 'milk', baby: 'demo_luca', user: 'demo_parent', amount: 130, unit: 'ml', timestamp: hoursAgo(30) },
-      { id: 'demo_luca_weight_1', type: 'weight', baby: 'demo_luca', user: 'demo_parent', amount: 4210, unit: 'g', timestamp: hoursAgo(14) },
-      { id: 'demo_luca_weight_2', type: 'weight', baby: 'demo_luca', user: 'demo_parent', amount: 4060, unit: 'g', timestamp: hoursAgo(96) },
-      { id: 'demo_luca_poo_1', type: 'poo', baby: 'demo_luca', user: 'demo_parent', timestamp: hoursAgo(7) },
+      {
+        id: 'demo_ava_feed_1',
+        type: 'milk',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 90,
+        unit: 'ml',
+        timestamp: hoursAgo(1.25),
+      },
+      {
+        id: 'demo_ava_feed_2',
+        type: 'milk',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 120,
+        unit: 'ml',
+        timestamp: hoursAgo(5.5),
+      },
+      {
+        id: 'demo_ava_feed_3',
+        type: 'milk',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 75,
+        unit: 'ml',
+        timestamp: hoursAgo(12),
+      },
+      {
+        id: 'demo_ava_feed_4',
+        type: 'milk',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 105,
+        unit: 'ml',
+        timestamp: hoursAgo(27),
+      },
+      {
+        id: 'demo_ava_weight_1',
+        type: 'weight',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 3650,
+        unit: 'g',
+        timestamp: hoursAgo(6),
+      },
+      {
+        id: 'demo_ava_weight_2',
+        type: 'weight',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        amount: 3490,
+        unit: 'g',
+        timestamp: hoursAgo(72),
+      },
+      {
+        id: 'demo_ava_poo_1',
+        type: 'poo',
+        baby: 'demo_ava',
+        user: 'demo_parent',
+        timestamp: hoursAgo(3.25),
+      },
+      {
+        id: 'demo_luca_feed_1',
+        type: 'milk',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 110,
+        unit: 'ml',
+        timestamp: hoursAgo(2.1),
+      },
+      {
+        id: 'demo_luca_feed_2',
+        type: 'milk',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 140,
+        unit: 'ml',
+        timestamp: hoursAgo(9),
+      },
+      {
+        id: 'demo_luca_feed_3',
+        type: 'milk',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 95,
+        unit: 'ml',
+        timestamp: hoursAgo(18),
+      },
+      {
+        id: 'demo_luca_feed_4',
+        type: 'milk',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 130,
+        unit: 'ml',
+        timestamp: hoursAgo(30),
+      },
+      {
+        id: 'demo_luca_weight_1',
+        type: 'weight',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 4210,
+        unit: 'g',
+        timestamp: hoursAgo(14),
+      },
+      {
+        id: 'demo_luca_weight_2',
+        type: 'weight',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        amount: 4060,
+        unit: 'g',
+        timestamp: hoursAgo(96),
+      },
+      {
+        id: 'demo_luca_poo_1',
+        type: 'poo',
+        baby: 'demo_luca',
+        user: 'demo_parent',
+        timestamp: hoursAgo(7),
+      },
     ],
   });
 }
@@ -2221,19 +2474,27 @@ function normalizeRecordList(records, mapper) {
   return (Array.isArray(records) ? records : [])
     .filter((item) => item && item.id)
     .map((item) => {
-      const stamp = item.updatedAt || item.createdAt || item.timestamp || nowIso();
+      const stamp =
+        item.updatedAt || item.createdAt || item.timestamp || nowIso();
       return mapper(stamped(item, stamp));
     });
 }
 
 function normalizeDateOnly(value) {
-  const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const match = String(value || '')
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return null;
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
@@ -2266,15 +2527,23 @@ function normalizeData(value) {
       deletedAt: item.deletedAt || null,
     })),
     babies: normalizeRecordList(source.babies, (item) => {
-      const birthDate = normalizeDateOnly(item.birthDate || item.dateOfBirth || item.dob);
-      const dueDate = normalizeDateOnly(item.dueDate || item.estimatedDueDate || item.edd);
+      const birthDate = normalizeDateOnly(
+        item.birthDate || item.dateOfBirth || item.dob,
+      );
+      const dueDate = normalizeDateOnly(
+        item.dueDate || item.estimatedDueDate || item.edd,
+      );
       return {
         id: item.id,
         name: String(item.name || item.label || '').trim() || 'Baby',
         birthDate,
         dueDate,
-        birthDateUpdatedAt: normalizeTimestamp(item.birthDateUpdatedAt) || (birthDate ? item.updatedAt : null),
-        dueDateUpdatedAt: normalizeTimestamp(item.dueDateUpdatedAt) || (dueDate ? item.updatedAt : null),
+        birthDateUpdatedAt:
+          normalizeTimestamp(item.birthDateUpdatedAt) ||
+          (birthDate ? item.updatedAt : null),
+        dueDateUpdatedAt:
+          normalizeTimestamp(item.dueDateUpdatedAt) ||
+          (dueDate ? item.updatedAt : null),
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
         deletedAt: item.deletedAt || null,
@@ -2300,7 +2569,9 @@ function normalizeData(value) {
       user: item.user || null,
       baby: item.baby || null,
       type: item.type || 'milk',
-      ...(item.amount != null && item.amount !== '' ? { amount: Number(item.amount) } : {}),
+      ...(item.amount != null && item.amount !== ''
+        ? { amount: Number(item.amount) }
+        : {}),
       ...(item.unit ? { unit: item.unit } : {}),
       medication: item.medication || null,
       createdAt: item.createdAt || item.timestamp || stamp,
@@ -2373,8 +2644,16 @@ function currentUnit() {
 }
 
 function hexToRgb(value) {
-  const hex = String(value || '').trim().replace(/^#/, '');
-  const expanded = hex.length === 3 ? hex.split('').map((ch) => ch + ch).join('') : hex;
+  const hex = String(value || '')
+    .trim()
+    .replace(/^#/, '');
+  const expanded =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((ch) => ch + ch)
+          .join('')
+      : hex;
   if (!/^[0-9a-f]{6}$/i.test(expanded)) return null;
   return {
     r: parseInt(expanded.slice(0, 2), 16),
@@ -2402,11 +2681,17 @@ function readableInkFor(hexColor) {
   if (!rgb) return '#ffffff';
   const white = { r: 255, g: 255, b: 255 };
   const ink = { r: 17, g: 24, b: 39 };
-  return contrastRatio(rgb, ink) >= contrastRatio(rgb, white) ? '#111827' : '#ffffff';
+  return contrastRatio(rgb, ink) >= contrastRatio(rgb, white)
+    ? '#111827'
+    : '#ffffff';
 }
 
 function recordStamp(item) {
-  return new Date(item.deletedAt || item.updatedAt || item.createdAt || item.timestamp || 0).getTime() || 0;
+  return (
+    new Date(
+      item.deletedAt || item.updatedAt || item.createdAt || item.timestamp || 0,
+    ).getTime() || 0
+  );
 }
 
 function newestRecord(left, right) {
@@ -2452,7 +2737,9 @@ function mergeBabyDateField(target, left, right, field) {
   }
 
   target[field] = normalizeDateOnly(winner?.[field]);
-  target[stampKey] = normalizeTimestamp(winner?.[stampKey]) || (target[field] ? normalizeTimestamp(winner?.updatedAt) : null);
+  target[stampKey] =
+    normalizeTimestamp(winner?.[stampKey]) ||
+    (target[field] ? normalizeTimestamp(winner?.updatedAt) : null);
 }
 
 function mergeBabyRecord(left, right) {
@@ -2479,12 +2766,18 @@ function mergeVaults(localData, remoteData) {
   const merged = normalizeData({
     schemaVersion: 1,
     meta: {
-      createdAt: [localData?.meta?.createdAt, remoteData?.meta?.createdAt].filter(Boolean).sort()[0] || nowIso(),
+      createdAt:
+        [localData?.meta?.createdAt, remoteData?.meta?.createdAt]
+          .filter(Boolean)
+          .sort()[0] || nowIso(),
       updatedAt: updatedAt || nowIso(),
     },
     users: mergeRecordList(localData?.users, remoteData?.users),
     babies: mergeBabyList(localData?.babies, remoteData?.babies),
-    medications: mergeRecordList(localData?.medications, remoteData?.medications),
+    medications: mergeRecordList(
+      localData?.medications,
+      remoteData?.medications,
+    ),
     entries: mergeRecordList(localData?.entries, remoteData?.entries),
   });
   return merged;
@@ -2509,7 +2802,11 @@ async function persistSession() {
 
 async function loadData() {
   const stored = await kvGet(DATA_KEY);
-  if (stored?.vault && stored.familyId === session?.familyId && session?.accessKey) {
+  if (
+    stored?.vault &&
+    stored.familyId === session?.familyId &&
+    session?.accessKey
+  ) {
     data = await decryptVault(stored.vault);
   } else if (stored?.vault) {
     data = buildEmptyData();
@@ -2547,12 +2844,14 @@ function updateConnectionBanner() {
 
   banner.classList.toggle('offline-banner--sync-disabled', _cloudSyncDisabled);
   if (_cloudSyncDisabled) {
-    banner.textContent = 'Cloud sync is not configured. Same-key users will not share data until Vercel Blob is connected.';
+    banner.textContent =
+      'Cloud sync is not configured. Same-key users will not share data until Vercel Blob is connected.';
     banner.classList.remove('hidden');
     return;
   }
 
-  banner.textContent = 'Saved here. Cloud sync will resume when this device is back online.';
+  banner.textContent =
+    'Saved here. Cloud sync will resume when this device is back online.';
   banner.classList.toggle('hidden', !_isOffline);
 }
 
@@ -2584,7 +2883,8 @@ function syncDetailText() {
   if (!session?.familyId) return 'No access key on this device';
   if (_cloudSyncDisabled) return 'Local only - Vercel Blob not connected';
   if (_isOffline) return 'Waiting for connection';
-  if (session.lastSyncedAt) return `Last synced ${formatElapsed(Date.now() - new Date(session.lastSyncedAt).getTime())}`;
+  if (session.lastSyncedAt)
+    return `Last synced ${formatElapsed(Date.now() - new Date(session.lastSyncedAt).getTime())}`;
   return 'Ready to sync';
 }
 
@@ -2593,11 +2893,14 @@ function updateSyncUi() {
 }
 
 async function fetchRemoteVault() {
-  const res = await fetch(`/api/vault?familyId=${encodeURIComponent(session.familyId)}`, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
-  });
+  const res = await fetch(
+    `/api/vault?familyId=${encodeURIComponent(session.familyId)}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    },
+  );
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const error = new Error(body.message || body.error || 'Cloud sync failed.');
@@ -2613,7 +2916,12 @@ async function putRemoteVault(vault, baseEtag) {
   const res = await fetch('/api/vault', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ familyId: session.familyId, baseEtag, deviceId, vault }),
+    body: JSON.stringify({
+      familyId: session.familyId,
+      baseEtag,
+      deviceId,
+      vault,
+    }),
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 409) return { conflict: true };
@@ -2640,14 +2948,21 @@ function scheduleSync(delayMs = 500) {
   if (!session?.accessKey || !session?.familyId) return;
   if (_cloudSyncDisabled) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => syncNow({ quiet: true }).catch(() => {}), delayMs);
+  syncTimer = setTimeout(
+    () => syncNow({ quiet: true }).catch(() => {}),
+    delayMs,
+  );
 }
 
 function shouldSyncOnForeground() {
   if (_demoMode || _cloudSyncDisabled || !navigator.onLine) return false;
   if (!session?.accessKey || !session?.familyId) return false;
-  const lastSyncedAt = session.lastSyncedAt ? new Date(session.lastSyncedAt).getTime() : 0;
-  return !lastSyncedAt || Date.now() - lastSyncedAt > SYNC_FOREGROUND_MIN_INTERVAL_MS;
+  const lastSyncedAt = session.lastSyncedAt
+    ? new Date(session.lastSyncedAt).getTime()
+    : 0;
+  return (
+    !lastSyncedAt || Date.now() - lastSyncedAt > SYNC_FOREGROUND_MIN_INTERVAL_MS
+  );
 }
 
 async function syncNow({ quiet = false, force = false } = {}) {
@@ -2672,8 +2987,12 @@ async function syncNow({ quiet = false, force = false } = {}) {
       return;
     }
 
-    const remotePlain = remote.exists ? await decryptRemoteVaults(remote) : null;
-    const merged = remotePlain ? mergeVaults(localBefore, remotePlain) : localBefore;
+    const remotePlain = remote.exists
+      ? await decryptRemoteVaults(remote)
+      : null;
+    const merged = remotePlain
+      ? mergeVaults(localBefore, remotePlain)
+      : localBefore;
     const localComparable = comparable(localBefore);
     const mergedComparable = comparable(merged);
     const remoteComparable = remotePlain ? comparable(remotePlain) : null;
@@ -2726,11 +3045,17 @@ async function syncNow({ quiet = false, force = false } = {}) {
         setCloudSyncDisabled(false);
         setOffline(false);
         showSetup();
-        setSetupStatus(error.message || 'This access key cannot join this deployment.', true);
+        setSetupStatus(
+          error.message || 'This access key cannot join this deployment.',
+          true,
+        );
         return;
       }
       setOffline(true);
-      setSyncStatus('Encrypted sync', error.message || 'Waiting for connection');
+      setSyncStatus(
+        'Encrypted sync',
+        error.message || 'Waiting for connection',
+      );
       throw error;
     })
     .finally(() => {
@@ -2751,7 +3076,10 @@ async function joinWithAccessKey(rawKey) {
   try {
     requireVaultCrypto();
   } catch (error) {
-    setSetupStatus(error.message || 'This browser cannot unlock encrypted vaults.', true);
+    setSetupStatus(
+      error.message || 'This browser cannot unlock encrypted vaults.',
+      true,
+    );
     return;
   }
 
@@ -2794,7 +3122,9 @@ async function joinWithAccessKey(rawKey) {
       setSetupStatus('');
       return;
     }
-    const remotePlain = remote.exists ? await decryptRemoteVaults(remote) : null;
+    const remotePlain = remote.exists
+      ? await decryptRemoteVaults(remote)
+      : null;
     if (remotePlain && !hasLocalVault) {
       session.remoteEtag = remote.etag || null;
       session.lastSyncedAt = nowIso();
@@ -2823,7 +3153,10 @@ async function joinWithAccessKey(rawKey) {
       await loadData();
       showApp();
       setOffline(true);
-      setSyncStatus('Encrypted sync', error.message || 'Waiting for connection');
+      setSyncStatus(
+        'Encrypted sync',
+        error.message || 'Waiting for connection',
+      );
       setSetupStatus('');
       return;
     }
@@ -2868,9 +3201,16 @@ function activateDemoMode() {
 
 function formatTime(isoString) {
   const d = new Date(isoString);
-  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeStr = d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
   const startOfYesterday = new Date(startOfToday - 86400000);
   const startOfEntry = new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
@@ -2880,7 +3220,11 @@ function formatTime(isoString) {
   } else if (startOfEntry.getTime() === startOfYesterday.getTime()) {
     dateStr = 'Yesterday';
   } else {
-    dateStr = d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+    dateStr = d.toLocaleDateString([], {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
   }
 
   return `${dateStr} at ${timeStr}`;
@@ -2990,8 +3334,16 @@ function formatWeightDate(isoString) {
   const d = new Date(isoString);
   if (!Number.isFinite(d.getTime())) return '';
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfWeight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const startOfWeight = new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+  ).getTime();
   const diff = Math.round((startOfWeight - startOfToday) / 86400000);
   if (diff === 0) return 'Today';
   if (diff === -1) return 'Yesterday';
@@ -3001,7 +3353,12 @@ function formatWeightDate(isoString) {
 function formatBabyBirthDate(value) {
   const ms = dateOnlyUtcMs(value);
   if (ms == null) return '';
-  return new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return new Date(ms).toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function ageMonthsAt(timestamp, birthDate) {
@@ -3014,7 +3371,8 @@ function ageMonthsAt(timestamp, birthDate) {
 function ageMonthsBetween(timestamp, baselineTimestamp) {
   const timestampMs = new Date(timestamp).getTime();
   const baselineMs = new Date(baselineTimestamp).getTime();
-  if (!Number.isFinite(timestampMs) || !Number.isFinite(baselineMs)) return null;
+  if (!Number.isFinite(timestampMs) || !Number.isFinite(baselineMs))
+    return null;
   return (timestampMs - baselineMs) / 86400000 / DAYS_PER_MONTH;
 }
 
@@ -3051,17 +3409,35 @@ function formatGrowthMonth(value) {
 function normalizeWeightGrowthView(view = _weightGrowthView) {
   const min = Number(view?.min);
   const max = Number(view?.max);
-  const rawWindow = Number.isFinite(min) && Number.isFinite(max) ? max - min : WEIGHT_GROWTH_AGE_MAX;
+  const rawWindow =
+    Number.isFinite(min) && Number.isFinite(max)
+      ? max - min
+      : WEIGHT_GROWTH_AGE_MAX;
   const windowMonths = Number.isFinite(rawWindow)
-    ? WEIGHT_GROWTH_VIEW_MONTHS.reduce((closest, months) => (Math.abs(months - rawWindow) < Math.abs(closest - rawWindow) ? months : closest), WEIGHT_GROWTH_AGE_MAX)
+    ? WEIGHT_GROWTH_VIEW_MONTHS.reduce(
+        (closest, months) =>
+          Math.abs(months - rawWindow) < Math.abs(closest - rawWindow)
+            ? months
+            : closest,
+        WEIGHT_GROWTH_AGE_MAX,
+      )
     : WEIGHT_GROWTH_AGE_MAX;
   const maxMin = WEIGHT_GROWTH_AGE_MAX - windowMonths;
-  const nextMin = Math.max(WEIGHT_GROWTH_AGE_MIN, Math.min(maxMin, Number.isFinite(min) ? Math.round(min) : WEIGHT_GROWTH_AGE_MIN));
+  const nextMin = Math.max(
+    WEIGHT_GROWTH_AGE_MIN,
+    Math.min(
+      maxMin,
+      Number.isFinite(min) ? Math.round(min) : WEIGHT_GROWTH_AGE_MIN,
+    ),
+  );
   return { min: nextMin, max: nextMin + windowMonths };
 }
 
 function resetWeightGrowthView() {
-  _weightGrowthView = { min: WEIGHT_GROWTH_AGE_MIN, max: WEIGHT_GROWTH_AGE_MAX };
+  _weightGrowthView = {
+    min: WEIGHT_GROWTH_AGE_MIN,
+    max: WEIGHT_GROWTH_AGE_MAX,
+  };
 }
 
 function setWeightGrowthView(view) {
@@ -3071,7 +3447,10 @@ function setWeightGrowthView(view) {
 
 function weightGrowthViewIsFull(view = _weightGrowthView) {
   const normalized = normalizeWeightGrowthView(view);
-  return normalized.min <= WEIGHT_GROWTH_AGE_MIN && normalized.max >= WEIGHT_GROWTH_AGE_MAX;
+  return (
+    normalized.min <= WEIGHT_GROWTH_AGE_MIN &&
+    normalized.max >= WEIGHT_GROWTH_AGE_MAX
+  );
 }
 
 function weightGrowthViewIndex(view = _weightGrowthView) {
@@ -3086,10 +3465,14 @@ function weightGrowthWindowMonths(view = _weightGrowthView) {
 function zoomWeightGrowthView(direction) {
   const view = normalizeWeightGrowthView();
   const currentIndex = weightGrowthViewIndex(view);
-  const nextIndex = direction === 'in'
-    ? Math.max(0, currentIndex - 1)
-    : Math.min(WEIGHT_GROWTH_VIEW_MONTHS.length - 1, currentIndex + 1);
-  setWeightGrowthView({ min: view.min, max: view.min + WEIGHT_GROWTH_VIEW_MONTHS[nextIndex] });
+  const nextIndex =
+    direction === 'in'
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(WEIGHT_GROWTH_VIEW_MONTHS.length - 1, currentIndex + 1);
+  setWeightGrowthView({
+    min: view.min,
+    max: view.min + WEIGHT_GROWTH_VIEW_MONTHS[nextIndex],
+  });
 }
 
 function panWeightGrowthView(direction) {
@@ -3181,7 +3564,12 @@ function milkLiveStats(now = Date.now()) {
     if (!Number.isFinite(t) || t > now) continue;
 
     if (!stats[e.baby]) {
-      stats[e.baby] = { lastAt: null, lastAmount: null, rollingAmount: 0, rollingFeeds: 0 };
+      stats[e.baby] = {
+        lastAt: null,
+        lastAmount: null,
+        rollingAmount: 0,
+        rollingFeeds: 0,
+      };
     }
 
     if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
@@ -3202,7 +3590,10 @@ function milkLiveStats(now = Date.now()) {
 }
 
 function milkStatsRangeById(id) {
-  return MILK_STATS_RANGE_OPTIONS.find((option) => option.id === id) || MILK_STATS_RANGE_OPTIONS[0];
+  return (
+    MILK_STATS_RANGE_OPTIONS.find((option) => option.id === id) ||
+    MILK_STATS_RANGE_OPTIONS[0]
+  );
 }
 
 function ensureMilkStatsCustomRange(now = Date.now()) {
@@ -3263,7 +3654,8 @@ function selectedMilkStatsRangeBounds(now = Date.now()) {
     id: option.id,
     start,
     end,
-    summary: startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
+    summary:
+      startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
     days: Math.max((end - start) / 86400000, 1),
   };
 }
@@ -3330,7 +3722,10 @@ function weightTrendModel(activeBabies) {
     .filter(({ points }) => points.length);
   const allPoints = series.flatMap(({ points }) => points);
 
-  const totalWeights = loggedSeries.reduce((sum, item) => sum + item.points.length, 0);
+  const totalWeights = loggedSeries.reduce(
+    (sum, item) => sum + item.points.length,
+    0,
+  );
   return {
     loggedSeries,
     series,
@@ -3344,7 +3739,9 @@ function weightTrendModel(activeBabies) {
 }
 
 function weightGrowthPercentileOptions() {
-  return normalizeWeightGrowthPercentiles(_weightGrowthPercentiles).map((key) => weightGrowthPercentileByKey(key));
+  return normalizeWeightGrowthPercentiles(_weightGrowthPercentiles).map((key) =>
+    weightGrowthPercentileByKey(key),
+  );
 }
 
 function whoWeightForAgeKg(row, percentile) {
@@ -3354,7 +3751,10 @@ function whoWeightForAgeKg(row, percentile) {
 }
 
 function whoReferenceRows(sex = _weightGrowthSex) {
-  return WHO_WEIGHT_FOR_AGE_LMS[weightGrowthSexById(sex).id] || WHO_WEIGHT_FOR_AGE_LMS[DEFAULT_WEIGHT_GROWTH_SEX];
+  return (
+    WHO_WEIGHT_FOR_AGE_LMS[weightGrowthSexById(sex).id] ||
+    WHO_WEIGHT_FOR_AGE_LMS[DEFAULT_WEIGHT_GROWTH_SEX]
+  );
 }
 
 function whoReferenceAgeMonths(row) {
@@ -3373,7 +3773,9 @@ function whoReferenceData(sex, percentile) {
 
 function growthSettingSummary() {
   const sex = weightGrowthSexById(_weightGrowthSex).name;
-  const percentiles = weightGrowthPercentileOptions().map((percentile) => percentile.name).join(', ');
+  const percentiles = weightGrowthPercentileOptions()
+    .map((percentile) => percentile.name)
+    .join(', ');
   return `${sex} · ${percentiles}`;
 }
 
@@ -3384,40 +3786,62 @@ function clampWeightGrowthAge(ageMonths, view = normalizeWeightGrowthView()) {
 }
 
 function defaultWeightSelectionAge(model, view = normalizeWeightGrowthView()) {
-  const visiblePoints = model.allPoints.filter((point) => point.ageMonths >= view.min && point.ageMonths <= view.max);
-  const latestPoint = visiblePoints.reduce((latest, point) => (!latest || point.timestamp > latest.timestamp ? point : latest), null);
+  const visiblePoints = model.allPoints.filter(
+    (point) => point.ageMonths >= view.min && point.ageMonths <= view.max,
+  );
+  const latestPoint = visiblePoints.reduce(
+    (latest, point) =>
+      !latest || point.timestamp > latest.timestamp ? point : latest,
+    null,
+  );
   return latestPoint?.ageMonths ?? view.max;
 }
 
 function selectedWeightAgeForModel(model) {
   const view = normalizeWeightGrowthView();
   const selectedAge = clampWeightGrowthAge(_selectedWeightAgeMonths, view);
-  _selectedWeightAgeMonths = selectedAge ?? defaultWeightSelectionAge(model, view);
+  _selectedWeightAgeMonths =
+    selectedAge ?? defaultWeightSelectionAge(model, view);
   return _selectedWeightAgeMonths;
 }
 
 function weightAtAge(points, ageMonths) {
   const ordered = [...points]
-    .filter((point) => Number.isFinite(point.ageMonths) && Number.isFinite(point.grams))
+    .filter(
+      (point) =>
+        Number.isFinite(point.ageMonths) && Number.isFinite(point.grams),
+    )
     .sort((a, b) => a.ageMonths - b.ageMonths);
   if (!ordered.length || !Number.isFinite(ageMonths)) return null;
 
   const first = ordered[0];
   const last = ordered[ordered.length - 1];
   const epsilon = 0.005;
-  if (ordered.length === 1) return { grams: first.grams, mode: 'single', point: first };
+  if (ordered.length === 1)
+    return { grams: first.grams, mode: 'single', point: first };
   if (ageMonths <= first.ageMonths) {
-    return { grams: first.grams, mode: Math.abs(ageMonths - first.ageMonths) <= epsilon ? 'exact' : 'before', point: first };
+    return {
+      grams: first.grams,
+      mode:
+        Math.abs(ageMonths - first.ageMonths) <= epsilon ? 'exact' : 'before',
+      point: first,
+    };
   }
   if (ageMonths >= last.ageMonths) {
-    return { grams: last.grams, mode: Math.abs(ageMonths - last.ageMonths) <= epsilon ? 'exact' : 'after', point: last };
+    return {
+      grams: last.grams,
+      mode: Math.abs(ageMonths - last.ageMonths) <= epsilon ? 'exact' : 'after',
+      point: last,
+    };
   }
 
   for (let i = 1; i < ordered.length; i++) {
     const previous = ordered[i - 1];
     const next = ordered[i];
-    if (Math.abs(ageMonths - previous.ageMonths) <= epsilon) return { grams: previous.grams, mode: 'exact', point: previous };
-    if (Math.abs(ageMonths - next.ageMonths) <= epsilon) return { grams: next.grams, mode: 'exact', point: next };
+    if (Math.abs(ageMonths - previous.ageMonths) <= epsilon)
+      return { grams: previous.grams, mode: 'exact', point: previous };
+    if (Math.abs(ageMonths - next.ageMonths) <= epsilon)
+      return { grams: next.grams, mode: 'exact', point: next };
     if (ageMonths > previous.ageMonths && ageMonths < next.ageMonths) {
       const span = next.ageMonths - previous.ageMonths;
       const ratio = span > 0 ? (ageMonths - previous.ageMonths) / span : 0;
@@ -3435,17 +3859,26 @@ function weightAtAge(points, ageMonths) {
 
 function weightReadingMeta(reading) {
   if (!reading) return 'No plotted weight';
-  if (reading.mode === 'trend') return `${formatGrowthAge(reading.from.ageMonths)}-${formatGrowthAge(reading.to.ageMonths)} trend`;
-  if (reading.mode === 'before') return `First weight · ${formatWeightDate(reading.point.timestamp)}`;
-  if (reading.mode === 'after') return `Latest weight · ${formatWeightDate(reading.point.timestamp)}`;
-  if (reading.mode === 'single') return `Only logged weight · ${formatWeightDate(reading.point.timestamp)}`;
+  if (reading.mode === 'trend')
+    return `${formatGrowthAge(reading.from.ageMonths)}-${formatGrowthAge(reading.to.ageMonths)} trend`;
+  if (reading.mode === 'before')
+    return `First weight · ${formatWeightDate(reading.point.timestamp)}`;
+  if (reading.mode === 'after')
+    return `Latest weight · ${formatWeightDate(reading.point.timestamp)}`;
+  if (reading.mode === 'single')
+    return `Only logged weight · ${formatWeightDate(reading.point.timestamp)}`;
   return `Logged ${formatWeightDate(reading.point.timestamp)}`;
 }
 
 function renderWeightSelectedMarkup(model, selectedAge) {
-  const ageText = Number.isFinite(selectedAge) ? formatGrowthAge(selectedAge) : '';
+  const ageText = Number.isFinite(selectedAge)
+    ? formatGrowthAge(selectedAge)
+    : '';
   const readings = model.series
-    .map(({ baby, points }) => ({ baby, reading: weightAtAge(points, selectedAge) }))
+    .map(({ baby, points }) => ({
+      baby,
+      reading: weightAtAge(points, selectedAge),
+    }))
     .filter(({ reading }) => reading);
 
   if (readings.length) {
@@ -3456,14 +3889,18 @@ function renderWeightSelectedMarkup(model, selectedAge) {
           <span class="dash-weight-readout-age">${escapeHtml(ageText)}</span>
         </div>
         <div class="dash-weight-readout-grid">
-          ${readings.map(({ baby, reading }) => `
+          ${readings
+            .map(
+              ({ baby, reading }) => `
             <div class="dash-weight-readout-item" style="--baby-colour:${baby.colour}">
               <span class="dash-weight-readout-swatch" aria-hidden="true"></span>
               <span class="dash-weight-selected-name">${escapeHtml(baby.name)}</span>
               <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(reading.grams))}</span>
               <span class="dash-weight-selected-meta">${escapeHtml(weightReadingMeta(reading))}</span>
             </div>
-          `).join('')}
+          `,
+            )
+            .join('')}
         </div>
       </div>`;
   }
@@ -3502,20 +3939,36 @@ function renderWeightTrend(activeBabies) {
   const selectedAge = selectedWeightAgeForModel(model);
   const chartNotices = [];
   if (model.missingAgeCount) {
-    chartNotices.push(model.missingAgeCount === 1 ? '1 logged weight needs a birth or due date to plot by age.' : `${model.missingAgeCount} logged weights need birth or due dates to plot by age.`);
+    chartNotices.push(
+      model.missingAgeCount === 1
+        ? '1 logged weight needs a birth or due date to plot by age.'
+        : `${model.missingAgeCount} logged weights need birth or due dates to plot by age.`,
+    );
   }
   if (model.estimatedAgeCount) {
-    chartNotices.push(model.estimatedAgeCount === 1 ? 'Using first logged weight as 0m until a birth or due date is set.' : "Using each baby's first logged weight as 0m until birth or due dates are set.");
+    chartNotices.push(
+      model.estimatedAgeCount === 1
+        ? 'Using first logged weight as 0m until a birth or due date is set.'
+        : "Using each baby's first logged weight as 0m until birth or due dates are set.",
+    );
   }
-  const dueDateBabies = activeBabies.filter((baby) => normalizeDateOnly(baby.dueDate));
+  const dueDateBabies = activeBabies.filter((baby) =>
+    normalizeDateOnly(baby.dueDate),
+  );
   if (dueDateBabies.length) {
-    chartNotices.push(`Using due date as 0m on the growth chart for ${dueDateBabies.map((baby) => baby.name).join(', ')}.`);
+    chartNotices.push(
+      `Using due date as 0m on the growth chart for ${dueDateBabies.map((baby) => baby.name).join(', ')}.`,
+    );
   }
   if (model.beforeRangeCount) {
-    chartNotices.push(`${model.beforeRangeCount} weight${model.beforeRangeCount === 1 ? '' : 's'} before the growth chart baseline ${model.beforeRangeCount === 1 ? 'is' : 'are'} hidden.`);
+    chartNotices.push(
+      `${model.beforeRangeCount} weight${model.beforeRangeCount === 1 ? '' : 's'} before the growth chart baseline ${model.beforeRangeCount === 1 ? 'is' : 'are'} hidden.`,
+    );
   }
   if (model.afterRangeCount) {
-    chartNotices.push(`${model.afterRangeCount} weight${model.afterRangeCount === 1 ? '' : 's'} after 24 months ${model.afterRangeCount === 1 ? 'is' : 'are'} hidden.`);
+    chartNotices.push(
+      `${model.afterRangeCount} weight${model.afterRangeCount === 1 ? '' : 's'} after 24 months ${model.afterRangeCount === 1 ? 'is' : 'are'} hidden.`,
+    );
   }
   const chartFooter = chartNotices.length
     ? `<div class="dash-weight-footer" aria-label="Weight chart notices">${chartNotices.map((notice) => `<p class="dash-weight-note">${escapeHtml(notice)}</p>`).join('')}</div>`
@@ -3540,7 +3993,8 @@ function updateWeightAgeSelection(model, ageMonths) {
   _selectedWeightAgeMonths = selectedAge;
 
   const selected = document.getElementById('dash-weight-selected');
-  if (selected) selected.outerHTML = renderWeightSelectedMarkup(model, selectedAge);
+  if (selected)
+    selected.outerHTML = renderWeightSelectedMarkup(model, selectedAge);
 
   if (weightTrendChart?.options?.plugins?.weightSelectionLine) {
     weightTrendChart.options.plugins.weightSelectionLine.age = selectedAge;
@@ -3594,7 +4048,8 @@ const weightSelectionLinePlugin = {
 
     const x = xScale.getPixelForValue(age);
     const { chartArea, ctx } = chart;
-    if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right) return;
+    if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right)
+      return;
 
     ctx.save();
     ctx.beginPath();
@@ -3646,14 +4101,26 @@ function initWeightTrendChart(activeBabies) {
   const selectedReferencePercentiles = weightGrowthPercentileOptions();
   const boundsPercentiles = selectedReferencePercentiles.length
     ? selectedReferencePercentiles
-    : DEFAULT_WEIGHT_GROWTH_PERCENTILES.map((key) => weightGrowthPercentileByKey(key)).filter(Boolean);
+    : DEFAULT_WEIGHT_GROWTH_PERCENTILES.map((key) =>
+        weightGrowthPercentileByKey(key),
+      ).filter(Boolean);
   const visibleReferenceRows = referenceRows.filter((row) => {
     const ageMonths = whoReferenceAgeMonths(row);
     return ageMonths >= view.min && ageMonths <= view.max;
   });
-  const boundedReferenceRows = visibleReferenceRows.length ? visibleReferenceRows : referenceRows;
-  const referenceBounds = boundedReferenceRows.flatMap((row) => boundsPercentiles.map((percentile) => whoWeightForAgeKg(row, percentile) * 1000));
-  const weights = allPoints.filter((point) => point.ageMonths >= view.min && point.ageMonths <= view.max).map((point) => point.grams);
+  const boundedReferenceRows = visibleReferenceRows.length
+    ? visibleReferenceRows
+    : referenceRows;
+  const referenceBounds = boundedReferenceRows.flatMap((row) =>
+    boundsPercentiles.map(
+      (percentile) => whoWeightForAgeKg(row, percentile) * 1000,
+    ),
+  );
+  const weights = allPoints
+    .filter(
+      (point) => point.ageMonths >= view.min && point.ageMonths <= view.max,
+    )
+    .map((point) => point.grams);
   let minWeight = Math.min(...referenceBounds, ...weights);
   let maxWeight = Math.max(...referenceBounds, ...weights);
   const weightPadding = Math.max(250, (maxWeight - minWeight) * 0.04);
@@ -3661,9 +4128,13 @@ function initWeightTrendChart(activeBabies) {
   maxWeight = Math.ceil((maxWeight + weightPadding) / 500) * 500;
 
   const rootStyles = getComputedStyle(document.documentElement);
-  const chartGridColor = rootStyles.getPropertyValue('--chart-grid').trim() || 'rgba(142, 142, 147, 0.22)';
-  const chartTextColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
-  const growthLineColor = rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+  const chartGridColor =
+    rootStyles.getPropertyValue('--chart-grid').trim() ||
+    'rgba(142, 142, 147, 0.22)';
+  const chartTextColor =
+    rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+  const growthLineColor =
+    rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
   const accentColor = rootStyles.getPropertyValue('--accent').trim() || '#666';
   const referenceDatasets = selectedReferencePercentiles.map((percentile) => ({
     label: `${percentile.name} percentile`,
@@ -3735,7 +4206,13 @@ function initWeightTrendChart(activeBabies) {
       onClick: (event, elements, chart) => {
         const { chartArea, scales } = chart;
         if (!scales?.x || !Number.isFinite(event.x)) return;
-        if (event.x < chartArea.left || event.x > chartArea.right || event.y < chartArea.top || event.y > chartArea.bottom) return;
+        if (
+          event.x < chartArea.left ||
+          event.x > chartArea.right ||
+          event.y < chartArea.top ||
+          event.y > chartArea.bottom
+        )
+          return;
         updateWeightAgeSelection(model, scales.x.getValueForPixel(event.x));
       },
     },
@@ -3751,7 +4228,13 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function renderSelButtons(containerId, items, stateKey, onChange, emptyText = '') {
+function renderSelButtons(
+  containerId,
+  items,
+  stateKey,
+  onChange,
+  emptyText = '',
+) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
 
@@ -3782,14 +4265,26 @@ function renderSelButtons(containerId, items, stateKey, onChange, emptyText = ''
 }
 
 function renderUserButtons() {
-  renderSelButtons('user-buttons', users(), 'user', () => updateSaveBtn(), 'Add a parent in Settings.');
+  renderSelButtons(
+    'user-buttons',
+    users(),
+    'user',
+    () => updateSaveBtn(),
+    'Add a parent in Settings.',
+  );
 }
 
 function renderBabyButtons() {
-  renderSelButtons('baby-buttons', babies(), 'baby', (id) => {
-    updateSaveBtn();
-    if (formState.type === 'medication') renderMedIntervals(id);
-  }, 'Add a baby in Settings.');
+  renderSelButtons(
+    'baby-buttons',
+    babies(),
+    'baby',
+    (id) => {
+      updateSaveBtn();
+      if (formState.type === 'medication') renderMedIntervals(id);
+    },
+    'Add a baby in Settings.',
+  );
 }
 
 function cleanDecimalInput(input) {
@@ -3807,10 +4302,12 @@ function cleanIntegerInput(input) {
 }
 
 function resetWeightInputs() {
-  ['weight-grams-input', 'weight-pounds-input', 'weight-ounces-input'].forEach((id) => {
-    const input = document.getElementById(id);
-    if (input) input.value = '';
-  });
+  ['weight-grams-input', 'weight-pounds-input', 'weight-ounces-input'].forEach(
+    (id) => {
+      const input = document.getElementById(id);
+      if (input) input.value = '';
+    },
+  );
 }
 
 function setWeightLbOzFields(grams) {
@@ -3842,8 +4339,11 @@ function updateWeightFromLbOzInputs() {
   const ouncesRaw = cleanDecimalInput(ouncesInput);
   const pounds = parseInt(poundsRaw || '0', 10);
   const ounces = parseFloat(ouncesRaw || '0');
-  const grams = Math.round((pounds * OUNCES_PER_POUND + ounces) * GRAMS_PER_OUNCE);
-  document.getElementById('weight-grams-input').value = grams > 0 ? String(grams) : '';
+  const grams = Math.round(
+    (pounds * OUNCES_PER_POUND + ounces) * GRAMS_PER_OUNCE,
+  );
+  document.getElementById('weight-grams-input').value =
+    grams > 0 ? String(grams) : '';
   formState.amount = grams > 0 ? String(grams) : '';
   updateSaveBtn();
 }
@@ -3898,10 +4398,14 @@ function renderTypeButtons() {
     updateSaveBtn();
   });
 
-  if (!formState.type) document.getElementById('amount-group').classList.add('hidden');
-  if (!formState.type) document.getElementById('weight-group').classList.add('hidden');
+  if (!formState.type)
+    document.getElementById('amount-group').classList.add('hidden');
+  if (!formState.type)
+    document.getElementById('weight-group').classList.add('hidden');
   if (!medications().length) {
-    const medBtn = document.querySelector('#type-buttons .sel-btn[data-id="medication"]');
+    const medBtn = document.querySelector(
+      '#type-buttons .sel-btn[data-id="medication"]',
+    );
     if (medBtn) medBtn.disabled = true;
   }
 }
@@ -3930,7 +4434,9 @@ function renderMedButtons() {
     if (med?.defaultAmount != null && med.defaultAmount !== '') {
       let prefillAmount = med.defaultAmount;
       if (formState.baby) {
-        const intervalMs = med.intervalHours ? med.intervalHours * 3600 * 1000 : Infinity;
+        const intervalMs = med.intervalHours
+          ? med.intervalHours * 3600 * 1000
+          : Infinity;
         const last = entries().find(
           (e) =>
             e.type === 'medication' &&
@@ -3967,7 +4473,12 @@ function renderMedIntervals(babyId) {
 
   const lastTaken = {};
   for (const e of entries()) {
-    if (e.type === 'medication' && e.baby === babyId && e.medication && !(e.medication in lastTaken)) {
+    if (
+      e.type === 'medication' &&
+      e.baby === babyId &&
+      e.medication &&
+      !(e.medication in lastTaken)
+    ) {
       lastTaken[e.medication] = e;
     }
   }
@@ -3993,11 +4504,17 @@ function renderMedIntervals(babyId) {
       let partial = false;
       if (last?.amount != null) {
         amountStr = ` · ${last.amount}${last.unit || med.unit || ''}`;
-        if (med.defaultAmount != null && last.amount < med.defaultAmount && elapsedMs < intervalMs) {
+        if (
+          med.defaultAmount != null &&
+          last.amount < med.defaultAmount &&
+          elapsedMs < intervalMs
+        ) {
           partial = true;
         }
       }
-      const rowClass = partial ? 'med-interval-row--partial' : `med-interval-row--${status}`;
+      const rowClass = partial
+        ? 'med-interval-row--partial'
+        : `med-interval-row--${status}`;
       return `<div class="med-interval-row ${rowClass}">
         <span class="med-interval-name">${escapeHtml(med.label)}</span>
         <span class="med-interval-time">${timeStr}${escapeHtml(amountStr)}</span>
@@ -4018,7 +4535,8 @@ function updateSaveBtn() {
     formState.type === 'poo' ||
     (formState.type === 'medication' && formState.medication);
   const amountOk = formState.type === 'poo' || parseFloat(formState.amount) > 0;
-  const ready = formState.user && formState.baby && formState.type && medOk && amountOk;
+  const ready =
+    formState.user && formState.baby && formState.type && medOk && amountOk;
   document.getElementById('save-btn').disabled = !ready;
 }
 
@@ -4110,7 +4628,9 @@ function clearForm() {
 
 function renderLog() {
   const list = document.getElementById('log-list');
-  const visibleEntries = entries().slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const visibleEntries = entries()
+    .slice()
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (!visibleEntries.length) {
     list.innerHTML = '<p class="log-empty">No entries yet.</p>';
@@ -4122,7 +4642,14 @@ function renderLog() {
       const baby = findBaby(e.baby);
       const user = findUser(e.user);
       const med = e.medication ? findMed(e.medication) : null;
-      const emoji = e.type === 'medication' ? '💊' : e.type === 'poo' ? '💩' : e.type === 'weight' ? '⚖️' : '🍼';
+      const emoji =
+        e.type === 'medication'
+          ? '💊'
+          : e.type === 'poo'
+            ? '💩'
+            : e.type === 'weight'
+              ? '⚖️'
+              : '🍼';
       const typeName =
         e.type === 'medication'
           ? escapeHtml(med ? med.label : e.medication)
@@ -4138,9 +4665,15 @@ function renderLog() {
             ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> weighed <span class="log-val">${escapeHtml(formatWeightLbOz(weightGrams(e)))}</span>`
             : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
       const medOptions = medications()
-        .map((m) => `<option value="${m.id}" ${e.medication === m.id ? 'selected' : ''}>${escapeHtml(m.label)}</option>`)
+        .map(
+          (m) =>
+            `<option value="${m.id}" ${e.medication === m.id ? 'selected' : ''}>${escapeHtml(m.label)}</option>`,
+        )
         .join('');
-      const tsLocal = new Date(new Date(e.timestamp).getTime() - new Date().getTimezoneOffset() * 60000)
+      const tsLocal = new Date(
+        new Date(e.timestamp).getTime() -
+          new Date().getTimezoneOffset() * 60000,
+      )
         .toISOString()
         .slice(0, 16);
       const babyColour = baby?.colour || 'var(--accent)';
@@ -4229,10 +4762,13 @@ function renderLog() {
         if (!entry) return;
         if (amtInput) entry.amount = parseFloat(amtInput.value);
         if (amtInput && entry.type === 'weight') entry.unit = WEIGHT_UNIT;
-        if (tsInput?.value) entry.timestamp = new Date(tsInput.value).toISOString();
+        if (tsInput?.value)
+          entry.timestamp = new Date(tsInput.value).toISOString();
         if (medInput) {
           entry.medication = medInput.value;
-          entry.unit = next.medications.find((med) => med.id === medInput.value)?.unit || entry.unit;
+          entry.unit =
+            next.medications.find((med) => med.id === medInput.value)?.unit ||
+            entry.unit;
         }
         entry.updatedAt = nowIso();
       });
@@ -4274,7 +4810,9 @@ function slugify(str, prefix) {
 
 function renderPersonCards(kind) {
   const list = kind === 'users' ? users() : babies();
-  const el = document.getElementById(kind === 'users' ? 'settings-users' : 'settings-babies');
+  const el = document.getElementById(
+    kind === 'users' ? 'settings-users' : 'settings-babies',
+  );
   el.innerHTML = '';
   if (!list.length) {
     el.innerHTML = '<p class="log-empty" style="padding:20px 0">None yet.</p>';
@@ -4284,9 +4822,13 @@ function renderPersonCards(kind) {
     const card = document.createElement('div');
     card.className = 'med-card';
     const babyDetails = [];
-    if (kind === 'babies' && item.birthDate) babyDetails.push(`Born ${formatBabyBirthDate(item.birthDate)}`);
-    if (kind === 'babies' && item.dueDate) babyDetails.push(`Due ${formatBabyBirthDate(item.dueDate)}`);
-    const birthDetail = babyDetails.length ? `<div class="med-card-details">${escapeHtml(babyDetails.join(' · '))}</div>` : '';
+    if (kind === 'babies' && item.birthDate)
+      babyDetails.push(`Born ${formatBabyBirthDate(item.birthDate)}`);
+    if (kind === 'babies' && item.dueDate)
+      babyDetails.push(`Due ${formatBabyBirthDate(item.dueDate)}`);
+    const birthDetail = babyDetails.length
+      ? `<div class="med-card-details">${escapeHtml(babyDetails.join(' · '))}</div>`
+      : '';
     card.innerHTML = `
       <div class="med-card-info">
         <div class="med-card-name">${escapeHtml(item.name)}</div>
@@ -4299,12 +4841,16 @@ function renderPersonCards(kind) {
   });
 
   el.querySelectorAll('.med-card-edit-btn').forEach((btn) =>
-    btn.addEventListener('click', () => openPersonForm(btn.dataset.kind, btn.dataset.id)),
+    btn.addEventListener('click', () =>
+      openPersonForm(btn.dataset.kind, btn.dataset.id),
+    ),
   );
   el.querySelectorAll('.settings-delete-btn').forEach((btn) =>
     btn.addEventListener('click', async () => {
       await mutateData((next) => {
-        const item = next[btn.dataset.kind].find((record) => record.id === btn.dataset.id);
+        const item = next[btn.dataset.kind].find(
+          (record) => record.id === btn.dataset.id,
+        );
         if (item) {
           item.deletedAt = nowIso();
           item.updatedAt = item.deletedAt;
@@ -4317,7 +4863,11 @@ function renderPersonCards(kind) {
 function openPersonForm(kind, id = null) {
   _personEdit = { kind, id };
   const item = id ? data[kind].find((record) => record.id === id) : null;
-  document.getElementById('person-form-title').textContent = id ? 'Edit' : kind === 'users' ? 'New parent' : 'New baby';
+  document.getElementById('person-form-title').textContent = id
+    ? 'Edit'
+    : kind === 'users'
+      ? 'New parent'
+      : 'New baby';
   document.getElementById('person-form-name').value = item?.name || '';
   const birthdateLabel = document.getElementById('person-form-birthdate-label');
   const birthdateInput = document.getElementById('person-form-birthdate');
@@ -4340,12 +4890,22 @@ function closePersonForm() {
 async function savePersonForm() {
   const name = document.getElementById('person-form-name').value.trim();
   if (!name || !_personEdit) return;
-  const birthDate = _personEdit.kind === 'babies' ? normalizeDateOnly(document.getElementById('person-form-birthdate').value) : null;
-  const dueDate = _personEdit.kind === 'babies' ? normalizeDateOnly(document.getElementById('person-form-duedate').value) : null;
+  const birthDate =
+    _personEdit.kind === 'babies'
+      ? normalizeDateOnly(
+          document.getElementById('person-form-birthdate').value,
+        )
+      : null;
+  const dueDate =
+    _personEdit.kind === 'babies'
+      ? normalizeDateOnly(document.getElementById('person-form-duedate').value)
+      : null;
   const stamp = nowIso();
   await mutateData((next) => {
     if (_personEdit.id) {
-      const item = next[_personEdit.kind].find((record) => record.id === _personEdit.id);
+      const item = next[_personEdit.kind].find(
+        (record) => record.id === _personEdit.id,
+      );
       if (item) {
         item.name = name;
         if (_personEdit.kind === 'babies') {
@@ -4384,7 +4944,8 @@ function renderMedCards() {
   el.innerHTML = '';
   const meds = medications();
   if (!meds.length) {
-    el.innerHTML = '<p class="log-empty" style="padding:20px 0">No medications yet.</p>';
+    el.innerHTML =
+      '<p class="log-empty" style="padding:20px 0">No medications yet.</p>';
     return;
   }
   meds.forEach((med) => {
@@ -4415,7 +4976,9 @@ function renderMedCards() {
   el.querySelectorAll('.settings-delete-btn').forEach((btn) =>
     btn.addEventListener('click', async () => {
       await mutateData((next) => {
-        const med = next.medications.find((record) => record.id === btn.dataset.id);
+        const med = next.medications.find(
+          (record) => record.id === btn.dataset.id,
+        );
         if (med) {
           med.deletedAt = nowIso();
           med.updatedAt = med.deletedAt;
@@ -4438,7 +5001,8 @@ function renderSetupGuide() {
   if (!missing.length) {
     detail.textContent = '';
   } else if (missing.length === 2) {
-    detail.textContent = 'Add at least one parent and one baby before logging entries.';
+    detail.textContent =
+      'Add at least one parent and one baby before logging entries.';
   } else {
     detail.textContent = `Add at least one ${missing[0]} before logging entries.`;
   }
@@ -4447,7 +5011,9 @@ function renderSetupGuide() {
 function openMedForm(id = null) {
   _medEditId = id;
   const med = id ? data.medications.find((record) => record.id === id) : null;
-  document.getElementById('med-form-title').textContent = med ? 'Edit medication' : 'New medication';
+  document.getElementById('med-form-title').textContent = med
+    ? 'Edit medication'
+    : 'New medication';
   document.getElementById('med-form-label').value = med?.label || '';
   document.getElementById('med-form-unit').value = med?.unit || 'ml';
   document.getElementById('med-form-amount').value = med?.defaultAmount ?? '';
@@ -4488,7 +5054,12 @@ async function saveMedForm() {
 
     if (_medEditId) {
       const idx = next.medications.findIndex((item) => item.id === _medEditId);
-      if (idx >= 0) next.medications[idx] = { ...next.medications[idx], ...med, createdAt: next.medications[idx].createdAt };
+      if (idx >= 0)
+        next.medications[idx] = {
+          ...next.medications[idx],
+          ...med,
+          createdAt: next.medications[idx].createdAt,
+        };
     } else {
       next.medications.push(med);
     }
@@ -4508,7 +5079,9 @@ function renderGrowthChartSettings() {
   const el = document.getElementById('growth-chart-settings');
   if (!el) return;
   const selectedSex = weightGrowthSexById(_weightGrowthSex).id;
-  const selectedPercentiles = new Set(normalizeWeightGrowthPercentiles(_weightGrowthPercentiles));
+  const selectedPercentiles = new Set(
+    normalizeWeightGrowthPercentiles(_weightGrowthPercentiles),
+  );
   el.innerHTML = `
     <div class="growth-setting-group">
       <div class="growth-setting-label">WHO chart</div>
@@ -4542,17 +5115,21 @@ function renderGrowthChartSettings() {
     btn.addEventListener('click', () => {
       saveWeightGrowthSex(btn.dataset.growthSex);
       renderGrowthChartSettings();
-      if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
+      if (document.getElementById('tab-charts')?.classList.contains('active'))
+        renderCharts();
     });
   });
 
   el.querySelectorAll('.growth-percentile-option input').forEach((input) => {
     input.addEventListener('change', () => {
-      const checked = [...el.querySelectorAll('.growth-percentile-option input:checked')].map((item) => item.value);
+      const checked = [
+        ...el.querySelectorAll('.growth-percentile-option input:checked'),
+      ].map((item) => item.value);
       const next = checked.length ? checked : ['p50'];
       saveWeightGrowthPercentiles(next);
       renderGrowthChartSettings();
-      if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
+      if (document.getElementById('tab-charts')?.classList.contains('active'))
+        renderCharts();
     });
   });
 }
@@ -4583,24 +5160,35 @@ function renderDashboard() {
   const selectedRange = selectedMilkStatsRangeBounds(now);
 
   if (rangeOptions) {
-    rangeOptions.innerHTML = MILK_STATS_RANGE_OPTIONS.map((option) => `
+    rangeOptions.innerHTML = MILK_STATS_RANGE_OPTIONS.map(
+      (option) => `
       <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === selectedRange.id}" data-milk-range="${escapeHtml(option.id)}">
         ${escapeHtml(option.name)}
-      </button>`)
-      .join('');
+      </button>`,
+    ).join('');
   }
-  if (customRange) customRange.classList.toggle('hidden', selectedRange.id !== 'custom');
-  if (rangeStart) rangeStart.value = selectedRange.id === 'custom' ? _milkStatsCustomStart : '';
-  if (rangeEnd) rangeEnd.value = selectedRange.id === 'custom' ? _milkStatsCustomEnd : '';
+  if (customRange)
+    customRange.classList.toggle('hidden', selectedRange.id !== 'custom');
+  if (rangeStart)
+    rangeStart.value =
+      selectedRange.id === 'custom' ? _milkStatsCustomStart : '';
+  if (rangeEnd)
+    rangeEnd.value = selectedRange.id === 'custom' ? _milkStatsCustomEnd : '';
   if (rangeSummary) rangeSummary.textContent = selectedRange.summary;
 
   if (!activeBabies.length) {
-    live.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
-    chart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+    live.innerHTML =
+      '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+    chart.innerHTML =
+      '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
 
-  const intakeStats = milkIntakeStats(selectedRange.start, selectedRange.end, activeBabies);
+  const intakeStats = milkIntakeStats(
+    selectedRange.start,
+    selectedRange.end,
+    activeBabies,
+  );
 
   live.innerHTML = activeBabies
     .map((baby) => {
@@ -4609,11 +5197,17 @@ function renderDashboard() {
       const weightText = latestWeight
         ? `${formatWeightLbOz(latestWeight.grams)} · ${formatWeightDate(latestWeight.timestamp)}`
         : 'No weight yet';
-      const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
+      const lastFeed =
+        stats?.lastAt != null
+          ? formatElapsed(now - stats.lastAt)
+          : 'No feed yet';
       const lastFeedParts = splitElapsedAgo(lastFeed);
-      const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
+      const avg = stats?.rollingFeeds
+        ? Math.round(stats.rollingAmount / stats.rollingFeeds)
+        : null;
       const avgText = avg != null ? formatMilkAmount(avg) : '—';
-      const lastAmountText = stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '—';
+      const lastAmountText =
+        stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '—';
       return `
       <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour};--baby-ink:${readableInkFor(baby.colour)}">
         <div class="dash-live-info">
@@ -4685,7 +5279,8 @@ function renderCharts() {
   const activeBabies = babies();
   if (!activeBabies.length) {
     destroyWeightTrendChart();
-    weightChart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+    weightChart.innerHTML =
+      '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
 
@@ -4695,19 +5290,28 @@ function renderCharts() {
 }
 
 function refreshDashboardLiveTimes() {
-  if (!data || !document.getElementById('tab-dashboard')?.classList.contains('active')) return;
+  if (
+    !data ||
+    !document.getElementById('tab-dashboard')?.classList.contains('active')
+  )
+    return;
   const now = Date.now();
   const liveStats = milkLiveStats(now);
-  document.querySelectorAll('.dash-live-metric[data-live-baby-id]').forEach((metric) => {
-    const babyId = metric.dataset.liveBabyId;
-    const stats = liveStats[babyId];
-    const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
-    const lastFeedParts = splitElapsedAgo(lastFeed);
-    const valueEl = metric.querySelector('.dash-live-last-value');
-    const agoEl = metric.querySelector('.dash-live-last-ago');
-    if (valueEl) valueEl.textContent = lastFeedParts.value;
-    if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
-  });
+  document
+    .querySelectorAll('.dash-live-metric[data-live-baby-id]')
+    .forEach((metric) => {
+      const babyId = metric.dataset.liveBabyId;
+      const stats = liveStats[babyId];
+      const lastFeed =
+        stats?.lastAt != null
+          ? formatElapsed(now - stats.lastAt)
+          : 'No feed yet';
+      const lastFeedParts = splitElapsedAgo(lastFeed);
+      const valueEl = metric.querySelector('.dash-live-last-value');
+      const agoEl = metric.querySelector('.dash-live-last-ago');
+      if (valueEl) valueEl.textContent = lastFeedParts.value;
+      if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
+    });
 }
 
 function nextDashboardClockDelay(now = Date.now()) {
@@ -4726,7 +5330,11 @@ function nextDashboardClockDelay(now = Date.now()) {
 
 function scheduleDashboardClockRefresh() {
   clearTimeout(dashboardClockTimer);
-  if (!data || !document.getElementById('tab-dashboard')?.classList.contains('active')) return;
+  if (
+    !data ||
+    !document.getElementById('tab-dashboard')?.classList.contains('active')
+  )
+    return;
   dashboardClockTimer = setTimeout(() => {
     refreshDashboardLiveTimes();
     scheduleDashboardClockRefresh();
@@ -4741,7 +5349,8 @@ function renderAll() {
   renderMedButtons();
   renderLog();
   renderDashboard();
-  if (document.getElementById('tab-charts')?.classList.contains('active')) renderCharts();
+  if (document.getElementById('tab-charts')?.classList.contains('active'))
+    renderCharts();
   renderSettings();
   updateUnitLabel();
   updateSaveBtn();
@@ -4802,31 +5411,37 @@ async function copyText(text) {
 
 function wireSetup() {
   document.getElementById('unlock-key-btn').addEventListener('click', () => {
-    joinWithAccessKey(document.getElementById('access-key-input').value).catch((error) => {
-      setSetupStatus(error.message || 'Could not join.', true);
-    });
+    joinWithAccessKey(document.getElementById('access-key-input').value).catch(
+      (error) => {
+        setSetupStatus(error.message || 'Could not join.', true);
+      },
+    );
   });
 }
 
 function wireInstallSuggestion() {
-  document.getElementById('install-dismiss-btn').addEventListener('click', dismissInstallSuggestion);
-  document.getElementById('install-action-btn').addEventListener('click', async () => {
-    if (!deferredInstallPrompt) return;
+  document
+    .getElementById('install-dismiss-btn')
+    .addEventListener('click', dismissInstallSuggestion);
+  document
+    .getElementById('install-action-btn')
+    .addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
 
-    const promptEvent = deferredInstallPrompt;
-    deferredInstallPrompt = null;
+      const promptEvent = deferredInstallPrompt;
+      deferredInstallPrompt = null;
 
-    try {
-      await promptEvent.prompt();
-      await promptEvent.userChoice;
-    } catch {
-      /* ignore */
-    }
+      try {
+        await promptEvent.prompt();
+        await promptEvent.userChoice;
+      } catch {
+        /* ignore */
+      }
 
-    _installSuggestionDismissed = true;
-    rememberInstallDismissal();
-    updateInstallSuggestion();
-  });
+      _installSuggestionDismissed = true;
+      rememberInstallDismissal();
+      updateInstallSuggestion();
+    });
 
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -4864,9 +5479,15 @@ function wireApp() {
     updateSaveBtn();
   });
 
-  document.getElementById('weight-grams-input').addEventListener('input', updateWeightFromGramsInput);
-  document.getElementById('weight-pounds-input').addEventListener('input', updateWeightFromLbOzInputs);
-  document.getElementById('weight-ounces-input').addEventListener('input', updateWeightFromLbOzInputs);
+  document
+    .getElementById('weight-grams-input')
+    .addEventListener('input', updateWeightFromGramsInput);
+  document
+    .getElementById('weight-pounds-input')
+    .addEventListener('input', updateWeightFromLbOzInputs);
+  document
+    .getElementById('weight-ounces-input')
+    .addEventListener('input', updateWeightFromLbOzInputs);
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
@@ -4890,38 +5511,63 @@ function wireApp() {
     }
   });
 
-  document.getElementById('add-med-btn').addEventListener('click', () => openMedForm(null));
-  document.getElementById('med-form-cancel').addEventListener('click', closeMedForm);
-  document.getElementById('med-form-save').addEventListener('click', saveMedForm);
-  document.getElementById('person-form-cancel').addEventListener('click', closePersonForm);
-  document.getElementById('person-form-save').addEventListener('click', savePersonForm);
-  document.querySelectorAll('[data-add-list]').forEach((btn) =>
-    btn.addEventListener('click', () => openPersonForm(btn.dataset.addList)),
-  );
+  document
+    .getElementById('add-med-btn')
+    .addEventListener('click', () => openMedForm(null));
+  document
+    .getElementById('med-form-cancel')
+    .addEventListener('click', closeMedForm);
+  document
+    .getElementById('med-form-save')
+    .addEventListener('click', saveMedForm);
+  document
+    .getElementById('person-form-cancel')
+    .addEventListener('click', closePersonForm);
+  document
+    .getElementById('person-form-save')
+    .addEventListener('click', savePersonForm);
+  document
+    .querySelectorAll('[data-add-list]')
+    .forEach((btn) =>
+      btn.addEventListener('click', () => openPersonForm(btn.dataset.addList)),
+    );
 
-  document.getElementById('dash-range-options').addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-milk-range]');
-    if (!btn) return;
-    selectMilkStatsRange(btn.dataset.milkRange);
-    renderDashboard();
-  });
-  document.getElementById('dash-range-start').addEventListener('input', (event) => {
-    setMilkStatsCustomRange('start', event.target.value);
-    renderDashboard();
-  });
-  document.getElementById('dash-range-end').addEventListener('input', (event) => {
-    setMilkStatsCustomRange('end', event.target.value);
-    renderDashboard();
-  });
+  document
+    .getElementById('dash-range-options')
+    .addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-milk-range]');
+      if (!btn) return;
+      selectMilkStatsRange(btn.dataset.milkRange);
+      renderDashboard();
+    });
+  document
+    .getElementById('dash-range-start')
+    .addEventListener('input', (event) => {
+      setMilkStatsCustomRange('start', event.target.value);
+      renderDashboard();
+    });
+  document
+    .getElementById('dash-range-end')
+    .addEventListener('input', (event) => {
+      setMilkStatsCustomRange('end', event.target.value);
+      renderDashboard();
+    });
   document.getElementById('sync-now-btn').addEventListener('click', () => {
     syncNow({ quiet: false, force: true }).catch(() => {});
   });
 
-  document.getElementById('copy-access-key-btn').addEventListener('click', async () => {
-    const copied = await copyText(session?.accessKey || '');
-    setSyncStatus('Encrypted sync', copied ? 'Access key copied' : 'Access key is not stored on this device');
-    setTimeout(updateSyncUi, 1800);
-  });
+  document
+    .getElementById('copy-access-key-btn')
+    .addEventListener('click', async () => {
+      const copied = await copyText(session?.accessKey || '');
+      setSyncStatus(
+        'Encrypted sync',
+        copied
+          ? 'Access key copied'
+          : 'Access key is not stored on this device',
+      );
+      setTimeout(updateSyncUi, 1800);
+    });
 
   const forgetBtn = document.getElementById('forget-key-btn');
   forgetBtn.addEventListener('click', async () => {
@@ -4978,7 +5624,9 @@ async function registerServiceWorker() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   applyAppearance();
-  const colorSchemeQuery = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+  const colorSchemeQuery = globalThis.matchMedia?.(
+    '(prefers-color-scheme: dark)',
+  );
   if (colorSchemeQuery?.addEventListener) {
     colorSchemeQuery.addEventListener('change', handleSystemColorSchemeChange);
   } else if (colorSchemeQuery?.addListener) {
@@ -4999,7 +5647,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (session?.familyId && session?.accessKey) {
     await ensureDeviceId();
     await loadData();
-    document.getElementById('remember-key-input').checked = session.rememberKey !== false;
+    document.getElementById('remember-key-input').checked =
+      session.rememberKey !== false;
     showApp();
     syncNow({ quiet: true }).catch(() => {});
   } else {
