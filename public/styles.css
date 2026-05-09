@@ -539,25 +539,22 @@ main::before {
 }
 
 .tab-btn--add {
-  gap: 3px;
-  padding-top: 6px;
-  padding-bottom: 8px;
+  gap: 2px;
 }
 
 .tab-btn--add .tab-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 26px;
+  border-radius: 8px;
   background: var(--accent);
   color: var(--accent-text);
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 900;
   line-height: 1;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
-  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
 }
 
 .tab-btn--add.active .tab-icon {
