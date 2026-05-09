@@ -1915,7 +1915,7 @@ function updateThemeMeta(theme, colorMode = selectedColorMode()) {
     { meta: lightMeta, content: metaColors.light },
     { meta: darkMeta, content: metaColors.dark },
     { meta: activeMeta, content: metaColors.active },
-    { meta: statusMeta, content: 'default' },
+    { meta: statusMeta, content: 'black-translucent' },
   ]);
   if (schemeMeta)
     schemeMeta.setAttribute(

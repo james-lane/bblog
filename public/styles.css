@@ -292,6 +292,7 @@ body {
   background: var(--bg);
   color: var(--text);
   padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   -webkit-text-size-adjust: 100%;
   overflow: hidden;
 }
@@ -509,7 +510,6 @@ main::before {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--tab-bar-bg);
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.05);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tab-btn {
