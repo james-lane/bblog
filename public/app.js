@@ -52,6 +52,12 @@ const WHO_WEIGHT_PERCENTILES = [
   { key: 'p999', name: '99.9th', z: 3.09023230616781 },
 ];
 const DEFAULT_WEIGHT_GROWTH_PERCENTILES = ['p3', 'p15', 'p50', 'p85', 'p97'];
+const MILK_STATS_RANGE_OPTIONS = [
+  { id: '24h', name: '24h', summary: 'Past 24h', durationMs: 24 * 60 * 60 * 1000 },
+  { id: '1w', name: '1w', summary: 'Past week', durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { id: '1m', name: '1m', summary: 'Past month', durationMs: 30 * 24 * 60 * 60 * 1000 },
+  { id: 'custom', name: 'Dates', summary: 'Custom dates' },
+];
 // Source: WHO Child Growth Standards expanded tables for constructing national health cards.
 // Rows are [ageDays, L, M, S]. WHO's chart conversion is 1 month = 30.4375 days.
 const WHO_WEIGHT_FOR_AGE_LMS = {
@@ -1592,7 +1598,9 @@ let dashboardClockTimer = null;
 let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
-let _dashOffset = 0;
+let _milkStatsRange = '24h';
+let _milkStatsCustomStart = '';
+let _milkStatsCustomEnd = '';
 let _medEditId = null;
 let _personEdit = null;
 let _selectedWeightAgeMonths = null;
@@ -2849,7 +2857,9 @@ function showApp() {
 function activateDemoMode() {
   _demoMode = true;
   _cloudSyncDisabled = false;
-  _dashOffset = 0;
+  _milkStatsRange = '24h';
+  _milkStatsCustomStart = '';
+  _milkStatsCustomEnd = '';
   session = { demo: true, rememberKey: false };
   data = buildDemoData();
   showApp();
@@ -2895,13 +2905,40 @@ function splitElapsedAgo(text) {
     : { value, hasAgo: false };
 }
 
-function formatDuration(ms) {
-  const totalMins = Math.round(ms / 60000);
-  if (totalMins < 1) return '<1m';
-  if (totalMins < 60) return `${totalMins}m`;
-  const hours = Math.floor(totalMins / 60);
-  const mins = totalMins % 60;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+function dateInputValue(timestamp = Date.now()) {
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
+  return `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dateInputParts(value) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return null;
+  const [year, month, day] = normalized.split('-').map(Number);
+  return { year, month, day };
+}
+
+function dateInputStartMs(value) {
+  const parts = dateInputParts(value);
+  if (!parts) return null;
+  return new Date(parts.year, parts.month - 1, parts.day).getTime();
+}
+
+function dateInputEndMs(value) {
+  const parts = dateInputParts(value);
+  if (!parts) return null;
+  return new Date(parts.year, parts.month - 1, parts.day + 1).getTime();
+}
+
+function formatMilkAmount(amount) {
+  if (!Number.isFinite(amount) || amount <= 0) return '—';
+  return `${Math.round(amount).toLocaleString()} ml`;
+}
+
+function formatMilkRangeDate(timestamp) {
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
 function milkAmount(entry) {
@@ -3144,33 +3181,118 @@ function milkLiveStats(now = Date.now()) {
     if (!Number.isFinite(t) || t > now) continue;
 
     if (!stats[e.baby]) {
-      stats[e.baby] = { lastAt: null, rollingAmount: 0, rollingFeeds: 0, rollingTimes: [] };
+      stats[e.baby] = { lastAt: null, lastAmount: null, rollingAmount: 0, rollingFeeds: 0 };
     }
 
     if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
       stats[e.baby].lastAt = t;
+      stats[e.baby].lastAmount = milkAmount(e);
     }
 
     if (t >= windowStart) {
       const amount = milkAmount(e);
-      stats[e.baby].rollingTimes.push(t);
       if (amount > 0) {
         stats[e.baby].rollingAmount += amount;
         stats[e.baby].rollingFeeds += 1;
-        stats[e.baby].rollingMin = stats[e.baby].rollingMin == null ? amount : Math.min(stats[e.baby].rollingMin, amount);
-        stats[e.baby].rollingMax = stats[e.baby].rollingMax == null ? amount : Math.max(stats[e.baby].rollingMax, amount);
       }
     }
   }
 
-  Object.values(stats).forEach((stat) => {
-    const times = stat.rollingTimes.sort((a, b) => a - b);
-    if (times.length < 2) return;
-    let totalGap = 0;
-    for (let i = 1; i < times.length; i++) {
-      totalGap += times[i] - times[i - 1];
+  return stats;
+}
+
+function milkStatsRangeById(id) {
+  return MILK_STATS_RANGE_OPTIONS.find((option) => option.id === id) || MILK_STATS_RANGE_OPTIONS[0];
+}
+
+function ensureMilkStatsCustomRange(now = Date.now()) {
+  const today = dateInputValue(now);
+  if (!_milkStatsCustomStart) _milkStatsCustomStart = today;
+  if (!_milkStatsCustomEnd) _milkStatsCustomEnd = today;
+}
+
+function selectMilkStatsRange(id) {
+  const option = milkStatsRangeById(id);
+  _milkStatsRange = option.id;
+  if (_milkStatsRange === 'custom') ensureMilkStatsCustomRange();
+}
+
+function setMilkStatsCustomRange(field, value) {
+  ensureMilkStatsCustomRange();
+  if (field === 'start') _milkStatsCustomStart = normalizeDateOnly(value) || '';
+  if (field === 'end') _milkStatsCustomEnd = normalizeDateOnly(value) || '';
+  _milkStatsRange = 'custom';
+}
+
+function selectedMilkStatsRangeBounds(now = Date.now()) {
+  const option = milkStatsRangeById(_milkStatsRange);
+  if (option.id !== 'custom') {
+    return {
+      id: option.id,
+      start: now - option.durationMs,
+      end: now,
+      summary: option.summary,
+      days: option.durationMs / 86400000,
+    };
+  }
+
+  ensureMilkStatsCustomRange(now);
+  let start = dateInputStartMs(_milkStatsCustomStart);
+  let end = dateInputEndMs(_milkStatsCustomEnd);
+
+  if (start == null || end == null) {
+    const today = dateInputValue(now);
+    _milkStatsCustomStart = today;
+    _milkStatsCustomEnd = today;
+    start = dateInputStartMs(today);
+    end = dateInputEndMs(today);
+  }
+
+  if (end <= start) {
+    const rangeStart = dateInputStartMs(_milkStatsCustomEnd);
+    const rangeEnd = dateInputEndMs(_milkStatsCustomStart);
+    if (rangeStart != null && rangeEnd != null && rangeEnd > rangeStart) {
+      start = rangeStart;
+      end = rangeEnd;
     }
-    stat.avgGapMs = totalGap / (times.length - 1);
+  }
+
+  const startLabel = formatMilkRangeDate(start);
+  const endLabel = formatMilkRangeDate(end - 1);
+  return {
+    id: option.id,
+    start,
+    end,
+    summary: startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
+    days: Math.max((end - start) / 86400000, 1),
+  };
+}
+
+function milkIntakeStats(start, end, activeBabies) {
+  const stats = {};
+  activeBabies.forEach((baby) => {
+    stats[baby.id] = {
+      total: 0,
+      feeds: 0,
+    };
+  });
+
+  for (const e of entries()) {
+    const stat = stats[e.baby];
+    if (e.type !== 'milk' || !stat) continue;
+    const t = new Date(e.timestamp).getTime();
+    if (!Number.isFinite(t) || t < start || t >= end) continue;
+    const amount = milkAmount(e);
+    if (amount <= 0) continue;
+
+    stat.total += amount;
+    stat.feeds += 1;
+  }
+
+  const periodDays = Math.max((end - start) / 86400000, 1);
+  Object.values(stats).forEach((stat) => {
+    stat.avgFeed = stat.feeds ? stat.total / stat.feeds : null;
+    stat.avgDaily = stat.total > 0 ? stat.total / periodDays : null;
   });
 
   return stats;
@@ -4446,48 +4568,39 @@ function renderSettings() {
   updateSyncUi();
 }
 
-function dashDay() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + _dashOffset);
-  return d;
-}
-
-function dashDayLabel(d) {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const diff = Math.round((d.getTime() - todayStart) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === -1) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
 function renderDashboard() {
-  const day = dashDay();
   const now = Date.now();
-  document.getElementById('dash-date-label').textContent = dashDayLabel(day);
-  document.getElementById('dash-next').disabled = _dashOffset >= 0;
-
-  const start = day.getTime();
-  const end = start + 86400000;
-  const totals = {};
   const liveStats = milkLiveStats(now);
   const latestWeights = latestWeightsByBaby();
-  for (const e of entries()) {
-    if (e.type !== 'milk') continue;
-    const t = new Date(e.timestamp).getTime();
-    if (t < start || t >= end) continue;
-    totals[e.baby] = (totals[e.baby] || 0) + milkAmount(e);
-  }
-
   const live = document.getElementById('dash-live-stats');
   const chart = document.getElementById('dash-milk-chart');
+  const rangeOptions = document.getElementById('dash-range-options');
+  const customRange = document.getElementById('dash-custom-range');
+  const rangeStart = document.getElementById('dash-range-start');
+  const rangeEnd = document.getElementById('dash-range-end');
+  const rangeSummary = document.getElementById('dash-range-summary');
   const activeBabies = babies();
+  const selectedRange = selectedMilkStatsRangeBounds(now);
+
+  if (rangeOptions) {
+    rangeOptions.innerHTML = MILK_STATS_RANGE_OPTIONS.map((option) => `
+      <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === selectedRange.id}" data-milk-range="${escapeHtml(option.id)}">
+        ${escapeHtml(option.name)}
+      </button>`)
+      .join('');
+  }
+  if (customRange) customRange.classList.toggle('hidden', selectedRange.id !== 'custom');
+  if (rangeStart) rangeStart.value = selectedRange.id === 'custom' ? _milkStatsCustomStart : '';
+  if (rangeEnd) rangeEnd.value = selectedRange.id === 'custom' ? _milkStatsCustomEnd : '';
+  if (rangeSummary) rangeSummary.textContent = selectedRange.summary;
+
   if (!activeBabies.length) {
     live.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     chart.innerHTML = '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
+
+  const intakeStats = milkIntakeStats(selectedRange.start, selectedRange.end, activeBabies);
 
   live.innerHTML = activeBabies
     .map((baby) => {
@@ -4498,11 +4611,9 @@ function renderDashboard() {
         : 'No weight yet';
       const lastFeed = stats?.lastAt != null ? formatElapsed(now - stats.lastAt) : 'No feed yet';
       const lastFeedParts = splitElapsedAgo(lastFeed);
-      const avgGapText = stats?.avgGapMs ? formatDuration(stats.avgGapMs) : '—';
       const avg = stats?.rollingFeeds ? Math.round(stats.rollingAmount / stats.rollingFeeds) : null;
-      const minText = stats?.rollingFeeds ? `${Math.round(stats.rollingMin)} ml` : '—';
-      const avgText = avg != null ? `${avg} ml` : '—';
-      const maxText = stats?.rollingFeeds ? `${Math.round(stats.rollingMax)} ml` : '—';
+      const avgText = avg != null ? formatMilkAmount(avg) : '—';
+      const lastAmountText = stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '—';
       return `
       <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour};--baby-ink:${readableInkFor(baby.colour)}">
         <div class="dash-live-info">
@@ -4510,19 +4621,15 @@ function renderDashboard() {
             <div class="dash-live-name">${escapeHtml(baby.name)}</div>
             <div class="dash-live-weight">${escapeHtml(weightText)}</div>
           </div>
-          <div class="dash-live-window">Rolling previous 24h</div>
+          <div class="dash-live-window">Latest feed</div>
           <div class="dash-live-rolling">
             <div class="dash-live-stat">
-              <span class="dash-live-stat-label">Min</span>
-              <span class="dash-live-stat-value">${escapeHtml(minText)}</span>
-            </div>
-            <div class="dash-live-stat">
-              <span class="dash-live-stat-label">Max</span>
-              <span class="dash-live-stat-value">${escapeHtml(maxText)}</span>
+              <span class="dash-live-stat-label">Previous feed</span>
+              <span class="dash-live-stat-value">${escapeHtml(lastAmountText)}</span>
             </div>
             <div class="dash-live-stat-divider" aria-hidden="true"></div>
             <div class="dash-live-stat">
-              <span class="dash-live-stat-label">Avg</span>
+              <span class="dash-live-stat-label">24h avg</span>
               <span class="dash-live-stat-value">${escapeHtml(avgText)}</span>
             </div>
           </div>
@@ -4531,8 +4638,6 @@ function renderDashboard() {
           <span class="dash-live-last-label">Last feed</span>
           <span class="dash-live-last-value">${escapeHtml(lastFeedParts.value)}</span>
           <span class="dash-live-last-ago" ${lastFeedParts.hasAgo ? '' : 'hidden'}>ago</span>
-          <span class="dash-live-gap-label">Avg gap</span>
-          <span class="dash-live-gap-value">${escapeHtml(avgGapText)}</span>
         </div>
       </div>`;
     })
@@ -4540,13 +4645,28 @@ function renderDashboard() {
 
   chart.innerHTML = activeBabies
     .map((baby) => {
-      const total = Math.round(totals[baby.id] || 0);
+      const stat = intakeStats[baby.id] || {};
+      const feeds = stat.feeds || 0;
+      const feedsText = feeds === 1 ? '1 feed' : `${feeds} feeds`;
       return `
-      <div class="dash-metric dash-total-metric" style="--baby-colour:${baby.colour}">
-        <div class="dash-metric-name">${escapeHtml(baby.name)}</div>
-        <div class="dash-total-amount">
-          <span class="dash-metric-value">${total > 0 ? total : '—'}</span>
-          <span class="dash-metric-unit">${total > 0 ? 'ml' : ''}</span>
+      <div class="dash-milk-metric" style="--baby-colour:${baby.colour}">
+        <div class="dash-milk-head">
+          <div class="dash-milk-name">${escapeHtml(baby.name)}</div>
+          <div class="dash-milk-count">${escapeHtml(feedsText)}</div>
+        </div>
+        <div class="dash-milk-values">
+          <div class="dash-milk-value dash-milk-value--total">
+            <span class="dash-milk-label">Total</span>
+            <span class="dash-milk-number">${escapeHtml(formatMilkAmount(stat.total))}</span>
+          </div>
+          <div class="dash-milk-value">
+            <span class="dash-milk-label">Avg feed</span>
+            <span class="dash-milk-number">${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
+          </div>
+          <div class="dash-milk-value">
+            <span class="dash-milk-label">Avg/day</span>
+            <span class="dash-milk-number">${escapeHtml(stat.avgDaily != null ? formatMilkAmount(stat.avgDaily) : '—')}</span>
+          </div>
         </div>
       </div>`;
     })
@@ -4779,15 +4899,19 @@ function wireApp() {
     btn.addEventListener('click', () => openPersonForm(btn.dataset.addList)),
   );
 
-  document.getElementById('dash-prev').addEventListener('click', () => {
-    _dashOffset--;
+  document.getElementById('dash-range-options').addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-milk-range]');
+    if (!btn) return;
+    selectMilkStatsRange(btn.dataset.milkRange);
     renderDashboard();
   });
-  document.getElementById('dash-next').addEventListener('click', () => {
-    if (_dashOffset < 0) {
-      _dashOffset++;
-      renderDashboard();
-    }
+  document.getElementById('dash-range-start').addEventListener('input', (event) => {
+    setMilkStatsCustomRange('start', event.target.value);
+    renderDashboard();
+  });
+  document.getElementById('dash-range-end').addEventListener('input', (event) => {
+    setMilkStatsCustomRange('end', event.target.value);
+    renderDashboard();
   });
   document.getElementById('sync-now-btn').addEventListener('click', () => {
     syncNow({ quiet: false, force: true }).catch(() => {});

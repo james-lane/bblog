@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bblog-v66';
+const CACHE_NAME = 'bblog-v67';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260508-bump-footer-spacing',
+  '/styles.css?v=20260509-dashboard-milk-ranges',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260508-bump-footer-spacing',
-  '/manifest.webmanifest?v=20260508-bump-footer-spacing',
-  '/icon.svg?v=20260508-bump-footer-spacing',
+  '/app.js?v=20260509-dashboard-milk-ranges',
+  '/manifest.webmanifest?v=20260509-dashboard-milk-ranges',
+  '/icon.svg?v=20260509-dashboard-milk-ranges',
 ];
 
 self.addEventListener('install', (event) => {
