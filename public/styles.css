@@ -509,7 +509,7 @@ main::before {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--tab-bar-bg);
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.05);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: clamp(0px, env(safe-area-inset-bottom, 0px), 20px);
 }
 
 .tab-btn {
