@@ -285,7 +285,10 @@ html {
 
 body {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   display: flex;
   flex-direction: column;
   font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
@@ -509,7 +512,6 @@ main::before {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--tab-bar-bg);
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.05);
-  margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tab-btn {
