@@ -6,7 +6,7 @@ const APP_SHELL = [
   '/vendor/chart.umd.min.js?v=4.5.1',
   '/app.js?v=20260509-dashboard-milk-ranges',
   '/manifest.webmanifest?v=20260509-dashboard-milk-ranges',
-  '/icon.svg?v=20260509-dashboard-milk-ranges',
+  '/icon.svg?v=20260509-logo-update',
 ];
 
 self.addEventListener('install', (event) => {
