@@ -285,10 +285,7 @@ html {
 
 body {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: env(safe-area-inset-bottom, 0px);
+  inset: 0;
   display: flex;
   flex-direction: column;
   font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
@@ -512,6 +509,7 @@ main::before {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   background: var(--tab-bar-bg);
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.05);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tab-btn {
@@ -523,7 +521,7 @@ main::before {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 10px 0;
+  padding: 6px 0;
   color: var(--text-muted);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -541,9 +539,9 @@ main::before {
 }
 
 .tab-btn--add {
-  gap: 3px;
-  padding-top: 6px;
-  padding-bottom: 8px;
+  gap: 2px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .tab-btn--add .tab-icon {
