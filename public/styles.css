@@ -1833,21 +1833,12 @@ main::before {
   white-space: nowrap;
 }
 
-.dash-live-window {
-  margin-top: 12px;
-  color: var(--baby-ink, #fff);
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1.2;
-  opacity: 0.85;
-}
-
 .dash-live-rolling {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   gap: 8px 12px;
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .dash-live-stat {
@@ -1907,6 +1898,16 @@ main::before {
   font-weight: 800;
   line-height: 1.2;
   opacity: 0.78;
+}
+
+.dash-live-last-amount {
+  display: block;
+  margin-top: 8px;
+  color: var(--baby-ink, #fff);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.05;
+  white-space: nowrap;
 }
 
 .hidden { display: none !important; }

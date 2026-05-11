@@ -3242,6 +3242,18 @@ function formatElapsed(ms) {
   return remHours > 0 ? `${days}d ${remHours}h ago` : `${days}d ago`;
 }
 
+function formatDuration(ms) {
+  const totalMins = Math.round(ms / 60000);
+  if (!Number.isFinite(totalMins) || totalMins <= 0) return '—';
+  if (totalMins < 60) return `${totalMins}m`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+}
+
 function splitElapsedAgo(text) {
   const value = String(text || '');
   return value.endsWith(' ago')
@@ -3567,22 +3579,32 @@ function milkLiveStats(now = Date.now()) {
       stats[e.baby] = {
         lastAt: null,
         lastAmount: null,
+        previousAt: null,
+        previousAmount: null,
         rollingAmount: 0,
         rollingFeeds: 0,
       };
     }
 
+    const amount = milkAmount(e);
+    if (amount <= 0) continue;
+
     if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
+      stats[e.baby].previousAt = stats[e.baby].lastAt;
+      stats[e.baby].previousAmount = stats[e.baby].lastAmount;
       stats[e.baby].lastAt = t;
-      stats[e.baby].lastAmount = milkAmount(e);
+      stats[e.baby].lastAmount = amount;
+    } else if (
+      stats[e.baby].previousAt == null ||
+      t > stats[e.baby].previousAt
+    ) {
+      stats[e.baby].previousAt = t;
+      stats[e.baby].previousAmount = amount;
     }
 
     if (t >= windowStart) {
-      const amount = milkAmount(e);
-      if (amount > 0) {
-        stats[e.baby].rollingAmount += amount;
-        stats[e.baby].rollingFeeds += 1;
-      }
+      stats[e.baby].rollingAmount += amount;
+      stats[e.baby].rollingFeeds += 1;
     }
   }
 
@@ -3666,6 +3688,7 @@ function milkIntakeStats(start, end, activeBabies) {
     stats[baby.id] = {
       total: 0,
       feeds: 0,
+      feedTimes: [],
     };
   });
 
@@ -3679,12 +3702,20 @@ function milkIntakeStats(start, end, activeBabies) {
 
     stat.total += amount;
     stat.feeds += 1;
+    stat.feedTimes.push(t);
   }
 
-  const periodDays = Math.max((end - start) / 86400000, 1);
   Object.values(stats).forEach((stat) => {
     stat.avgFeed = stat.feeds ? stat.total / stat.feeds : null;
-    stat.avgDaily = stat.total > 0 ? stat.total / periodDays : null;
+    stat.feedTimes.sort((a, b) => a - b);
+    let totalGapMs = 0;
+    for (let i = 1; i < stat.feedTimes.length; i += 1) {
+      totalGapMs += stat.feedTimes[i] - stat.feedTimes[i - 1];
+    }
+    stat.avgGapMs =
+      stat.feedTimes.length > 1
+        ? totalGapMs / (stat.feedTimes.length - 1)
+        : null;
   });
 
   return stats;
@@ -5206,8 +5237,12 @@ function renderDashboard() {
         ? Math.round(stats.rollingAmount / stats.rollingFeeds)
         : null;
       const avgText = avg != null ? formatMilkAmount(avg) : '—';
+      const previousAmountText =
+        stats?.previousAt != null
+          ? formatMilkAmount(stats.previousAmount)
+          : '—';
       const lastAmountText =
-        stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '—';
+        stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
       return `
       <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour};--baby-ink:${readableInkFor(baby.colour)}">
         <div class="dash-live-info">
@@ -5215,11 +5250,10 @@ function renderDashboard() {
             <div class="dash-live-name">${escapeHtml(baby.name)}</div>
             <div class="dash-live-weight">${escapeHtml(weightText)}</div>
           </div>
-          <div class="dash-live-window">Latest feed</div>
           <div class="dash-live-rolling">
             <div class="dash-live-stat">
               <span class="dash-live-stat-label">Previous feed</span>
-              <span class="dash-live-stat-value">${escapeHtml(lastAmountText)}</span>
+              <span class="dash-live-stat-value">${escapeHtml(previousAmountText)}</span>
             </div>
             <div class="dash-live-stat-divider" aria-hidden="true"></div>
             <div class="dash-live-stat">
@@ -5232,6 +5266,9 @@ function renderDashboard() {
           <span class="dash-live-last-label">Last feed</span>
           <span class="dash-live-last-value">${escapeHtml(lastFeedParts.value)}</span>
           <span class="dash-live-last-ago" ${lastFeedParts.hasAgo ? '' : 'hidden'}>ago</span>
+          <span class="dash-live-last-amount" ${stats?.lastAt != null ? '' : 'hidden'}>${escapeHtml(
+            lastAmountText,
+          )}</span>
         </div>
       </div>`;
     })
@@ -5258,8 +5295,8 @@ function renderDashboard() {
             <span class="dash-milk-number">${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
           </div>
           <div class="dash-milk-value">
-            <span class="dash-milk-label">Avg/day</span>
-            <span class="dash-milk-number">${escapeHtml(stat.avgDaily != null ? formatMilkAmount(stat.avgDaily) : '—')}</span>
+            <span class="dash-milk-label">Avg gap</span>
+            <span class="dash-milk-number">${escapeHtml(stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—')}</span>
           </div>
         </div>
       </div>`;
@@ -5309,8 +5346,14 @@ function refreshDashboardLiveTimes() {
       const lastFeedParts = splitElapsedAgo(lastFeed);
       const valueEl = metric.querySelector('.dash-live-last-value');
       const agoEl = metric.querySelector('.dash-live-last-ago');
+      const amountEl = metric.querySelector('.dash-live-last-amount');
       if (valueEl) valueEl.textContent = lastFeedParts.value;
       if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
+      if (amountEl) {
+        amountEl.textContent =
+          stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
+        amountEl.hidden = stats?.lastAt == null;
+      }
     });
 }
 
