@@ -1271,6 +1271,114 @@ main::before {
 
 .med-select:focus { box-shadow: 0 0 0 3px var(--focus-ring); }
 
+.med-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.med-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.42fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.med-choice--selected {
+  box-shadow: inset 0 0 0 2px var(--accent), var(--shadow);
+}
+
+.med-choice-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.med-choice-check {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+
+.med-choice-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.med-choice-name {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.med-choice-detail {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.med-choice-dose {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.med-dose-input {
+  width: 100%;
+  height: 42px;
+  background: var(--field-bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: right;
+  outline: none;
+}
+
+.med-dose-input:focus {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.med-dose-input:disabled {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.med-choice-warning {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  background: var(--warning-bg);
+  border-radius: var(--radius-sm);
+  color: var(--warning-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+@media (max-width: 430px) {
+  .med-choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .timestamp-toggle {
   width: 100%;
   height: 40px;

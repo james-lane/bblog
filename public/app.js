@@ -1608,6 +1608,7 @@ const formState = {
   baby: null,
   type: null,
   medication: null,
+  medicationDoses: {},
   amount: '',
 };
 
@@ -2635,10 +2636,36 @@ function findMed(id) {
   return medications().find((m) => m.id === id);
 }
 
+function selectedMedicationIds() {
+  return Object.keys(formState.medicationDoses || {}).filter((id) =>
+    findMed(id),
+  );
+}
+
+function selectedMedicationDoses() {
+  return selectedMedicationIds().map((id) => ({
+    medication: id,
+    amount: formState.medicationDoses[id],
+  }));
+}
+
+function medicationSelected(id) {
+  return Object.prototype.hasOwnProperty.call(
+    formState.medicationDoses || {},
+    id,
+  );
+}
+
+function resetMedicationSelection() {
+  formState.medication = null;
+  formState.medicationDoses = {};
+}
+
 function currentUnit() {
   if (formState.type === 'weight') return WEIGHT_UNIT;
-  if (formState.type === 'medication' && formState.medication) {
-    return findMed(formState.medication)?.unit || 'ml';
+  if (formState.type === 'medication') {
+    const [medicationId] = selectedMedicationIds();
+    if (medicationId) return findMed(medicationId)?.unit || 'ml';
   }
   return MILK_UNIT;
 }
@@ -4312,7 +4339,10 @@ function renderBabyButtons() {
     'baby',
     (id) => {
       updateSaveBtn();
-      if (formState.type === 'medication') renderMedIntervals(id);
+      if (formState.type === 'medication') {
+        renderMedButtons();
+        renderMedIntervals(id);
+      }
     },
     'Add a baby in Settings.',
   );
@@ -4388,7 +4418,7 @@ function renderTypeButtons() {
   ];
 
   renderSelButtons('type-buttons', types, 'type', (selectedId) => {
-    formState.medication = null;
+    resetMedicationSelection();
     formState.amount = '';
     const amountInput = document.getElementById('amount-input');
     amountInput.value = '';
@@ -4401,7 +4431,7 @@ function renderTypeButtons() {
 
     if (selectedId === 'medication') {
       medStep.classList.remove('hidden');
-      amountGroup.classList.remove('hidden');
+      amountGroup.classList.add('hidden');
       weightGroup.classList.add('hidden');
       resetWeightInputs();
       renderMedButtons();
@@ -4441,56 +4471,164 @@ function renderTypeButtons() {
   }
 }
 
+function medicationDefaultAmount(med) {
+  const amount = Number(med?.defaultAmount);
+  return Number.isFinite(amount) && amount > 0 ? String(amount) : '';
+}
+
+function latestMedicationEntry(medicationId, babyId, now = Date.now()) {
+  let latest = null;
+  let latestTime = -Infinity;
+
+  for (const entry of entries()) {
+    if (
+      entry.type !== 'medication' ||
+      entry.baby !== babyId ||
+      entry.medication !== medicationId ||
+      entry.amount == null
+    )
+      continue;
+
+    const timestamp = new Date(entry.timestamp).getTime();
+    if (
+      !Number.isFinite(timestamp) ||
+      timestamp > now ||
+      timestamp <= latestTime
+    )
+      continue;
+
+    latest = entry;
+    latestTime = timestamp;
+  }
+
+  return latest;
+}
+
+function medicationDosePrefill(med, babyId, now = Date.now()) {
+  const defaultAmount = medicationDefaultAmount(med);
+  const result = { amount: defaultAmount, warning: '' };
+  if (!defaultAmount || !babyId) return result;
+
+  const intervalMs = med.intervalHours
+    ? med.intervalHours * 3600 * 1000
+    : Infinity;
+  const last = latestMedicationEntry(med.id, babyId, now);
+  const lastAt = new Date(last?.timestamp || '').getTime();
+  const lastAmount = Number(last?.amount);
+
+  if (
+    last &&
+    Number.isFinite(lastAt) &&
+    now - lastAt < intervalMs &&
+    Number.isFinite(lastAmount) &&
+    lastAmount < Number(defaultAmount)
+  ) {
+    const baby = findBaby(babyId);
+    const babyName = baby?.name || 'this baby';
+    const unit = last.unit || med.unit || '';
+    result.amount = String(last.amount);
+    result.warning = `The last dose of ${med.label} for ${babyName} was ${last.amount}${unit}.`;
+  }
+
+  return result;
+}
+
+function medicationDetailText(med) {
+  const details = [];
+  const defaultAmount = medicationDefaultAmount(med);
+  if (defaultAmount)
+    details.push(`${defaultAmount} ${med.unit || 'ml'} fixed`);
+  if (med.intervalHours) details.push(`every ${med.intervalHours}h`);
+  return details.join(' · ');
+}
+
 function renderMedButtons() {
-  const select = document.getElementById('medication-select');
-  select.innerHTML = '<option value="">Select medication</option>';
-  medications().forEach((med) => {
-    const opt = document.createElement('option');
-    opt.value = med.id;
-    opt.textContent = med.label;
-    if (formState.medication === med.id) opt.selected = true;
-    select.appendChild(opt);
-  });
+  const container = document.getElementById('medication-select');
+  const meds = medications();
 
-  const fresh = select.cloneNode(true);
-  select.parentNode.replaceChild(fresh, select);
-  fresh.addEventListener('change', () => {
-    formState.medication = fresh.value || null;
-    const med = findMed(formState.medication);
-    const amountInput = document.getElementById('amount-input');
-    const warning = document.getElementById('med-partial-warning');
-    warning.classList.add('hidden');
-    warning.textContent = '';
+  if (!meds.length) {
+    container.innerHTML =
+      '<p class="inline-empty">Add medications in Settings.</p>';
+    return;
+  }
 
-    if (med?.defaultAmount != null && med.defaultAmount !== '') {
-      let prefillAmount = med.defaultAmount;
-      if (formState.baby) {
-        const intervalMs = med.intervalHours
-          ? med.intervalHours * 3600 * 1000
-          : Infinity;
-        const last = entries().find(
-          (e) =>
-            e.type === 'medication' &&
-            e.baby === formState.baby &&
-            e.medication === med.id &&
-            e.amount != null &&
-            Date.now() - new Date(e.timestamp).getTime() < intervalMs,
-        );
-        if (last && last.amount < med.defaultAmount) {
-          prefillAmount = last.amount;
-          const baby = findBaby(formState.baby);
-          warning.textContent = `The last dose of ${med.label} for ${baby?.name || 'this baby'} was ${last.amount}${last.unit || med.unit || ''}.`;
-          warning.classList.remove('hidden');
+  container.innerHTML = meds
+    .map((med) => {
+      const selected = medicationSelected(med.id);
+      const dose = selected ? formState.medicationDoses[med.id] || '' : '';
+      const prefill = medicationDosePrefill(med, formState.baby);
+      const detail = medicationDetailText(med);
+      return `
+        <div class="med-choice${selected ? ' med-choice--selected' : ''}">
+          <label class="med-choice-main">
+            <input
+              class="med-choice-check"
+              type="checkbox"
+              data-med-id="${escapeHtml(med.id)}"
+              ${selected ? 'checked' : ''}
+            />
+            <span class="med-choice-copy">
+              <span class="med-choice-name">${escapeHtml(med.label)}</span>
+              ${
+                detail
+                  ? `<span class="med-choice-detail">${escapeHtml(detail)}</span>`
+                  : ''
+              }
+            </span>
+          </label>
+          <label class="med-choice-dose">Dose (${escapeHtml(med.unit || 'ml')})
+            <input
+              class="med-dose-input"
+              type="text"
+              inputmode="decimal"
+              pattern="[0-9]*\\.?[0-9]*"
+              data-med-dose="${escapeHtml(med.id)}"
+              value="${escapeHtml(dose)}"
+              autocomplete="off"
+              autocorrect="off"
+              spellcheck="false"
+              ${selected ? '' : 'disabled'}
+            />
+          </label>
+          ${
+            selected && prefill.warning
+              ? `<div class="med-choice-warning">${escapeHtml(prefill.warning)}</div>`
+              : ''
+          }
+        </div>`;
+    })
+    .join('');
+
+  container.querySelectorAll('.med-choice-check').forEach((input) => {
+    input.addEventListener('change', () => {
+      const med = findMed(input.dataset.medId);
+      if (!med) return;
+
+      if (input.checked) {
+        const prefill = medicationDosePrefill(med, formState.baby);
+        formState.medicationDoses[med.id] = prefill.amount || '';
+        formState.medication = med.id;
+      } else {
+        delete formState.medicationDoses[med.id];
+        if (formState.medication === med.id) {
+          formState.medication = selectedMedicationIds()[0] || null;
         }
       }
-      amountInput.value = String(prefillAmount);
-      formState.amount = String(prefillAmount);
-    }
 
-    amountInput.readOnly = false;
-    amountInput.classList.remove('amount-input--locked');
-    updateUnitLabel();
-    updateSaveBtn();
+      renderMedButtons();
+      updateUnitLabel();
+      updateSaveBtn();
+    });
+  });
+
+  container.querySelectorAll('.med-dose-input').forEach((input) => {
+    input.addEventListener('input', () => {
+      const amount = cleanDecimalInput(input);
+      if (medicationSelected(input.dataset.medDose)) {
+        formState.medicationDoses[input.dataset.medDose] = amount;
+      }
+      updateSaveBtn();
+    });
   });
 }
 
@@ -4560,12 +4698,19 @@ function updateUnitLabel() {
 }
 
 function updateSaveBtn() {
+  const selectedMeds = selectedMedicationDoses();
+  const medicationOk =
+    selectedMeds.length > 0 &&
+    selectedMeds.every(({ amount }) => parseFloat(amount) > 0);
   const medOk =
     formState.type === 'milk' ||
     formState.type === 'weight' ||
     formState.type === 'poo' ||
-    (formState.type === 'medication' && formState.medication);
-  const amountOk = formState.type === 'poo' || parseFloat(formState.amount) > 0;
+    (formState.type === 'medication' && medicationOk);
+  const amountOk =
+    formState.type === 'poo' ||
+    formState.type === 'medication' ||
+    parseFloat(formState.amount) > 0;
   const ready =
     formState.user && formState.baby && formState.type && medOk && amountOk;
   document.getElementById('save-btn').disabled = !ready;
@@ -4575,48 +4720,84 @@ async function saveEntry() {
   const tsInput = document.getElementById('timestamp-input').value;
   const timestamp = tsInput ? new Date(tsInput).toISOString() : nowIso();
   const stamp = nowIso();
-  const entry = {
-    id: uid('entry_'),
-    timestamp,
-    user: formState.user,
-    baby: formState.baby,
-    type: formState.type,
-    ...(formState.type !== 'poo' && {
-      amount: parseFloat(formState.amount),
-      unit: currentUnit(),
-    }),
-    medication: formState.medication,
-    createdAt: stamp,
-    updatedAt: stamp,
-    deletedAt: null,
-  };
+  let savedEntries;
+
+  if (formState.type === 'medication') {
+    savedEntries = selectedMedicationDoses().map(({ medication, amount }) => {
+      const med = findMed(medication);
+      return {
+        id: uid('entry_'),
+        timestamp,
+        user: formState.user,
+        baby: formState.baby,
+        type: 'medication',
+        amount: parseFloat(amount),
+        unit: med?.unit || 'ml',
+        medication,
+        createdAt: stamp,
+        updatedAt: stamp,
+        deletedAt: null,
+      };
+    });
+  } else {
+    savedEntries = [
+      {
+        id: uid('entry_'),
+        timestamp,
+        user: formState.user,
+        baby: formState.baby,
+        type: formState.type,
+        ...(formState.type !== 'poo' && {
+          amount: parseFloat(formState.amount),
+          unit: currentUnit(),
+        }),
+        medication: formState.medication,
+        createdAt: stamp,
+        updatedAt: stamp,
+        deletedAt: null,
+      },
+    ];
+  }
+  if (!savedEntries.length) return;
 
   await mutateData((next) => {
-    next.entries.unshift(entry);
+    next.entries.unshift(...savedEntries);
   });
 
   const baby = findBaby(formState.baby);
-  const detail =
-    formState.type === 'poo'
-      ? 'Poo'
-      : formState.type === 'medication'
-        ? findMed(formState.medication)?.label || formState.medication
+  let detail;
+  let amountStr = '';
+  if (formState.type === 'medication') {
+    detail = savedEntries
+      .map((entry) => {
+        const med = findMed(entry.medication);
+        return `${med?.label || entry.medication} ${entry.amount} ${
+          entry.unit
+        }`;
+      })
+      .join(' + ');
+  } else {
+    const entry = savedEntries[0];
+    detail =
+      formState.type === 'poo'
+        ? 'Poo'
         : formState.type === 'weight'
           ? 'Weight'
           : 'Milk';
-  const amountStr =
-    formState.type === 'weight'
-      ? ` ${formatWeightLbOz(weightGrams(entry))}`
-      : formState.type !== 'poo'
-        ? ` ${entry.amount} ${entry.unit}`
-        : '';
+    amountStr =
+      formState.type === 'weight'
+        ? ` ${formatWeightLbOz(weightGrams(entry))}`
+        : formState.type !== 'poo'
+          ? ` ${entry.amount} ${entry.unit}`
+          : '';
+  }
   const conf = document.getElementById('confirmation');
   conf.textContent = `Saved - ${baby?.name || formState.baby}: ${detail}${amountStr}`;
   conf.classList.remove('hidden');
   setTimeout(() => conf.classList.add('hidden'), 3000);
 
   formState.type = null;
-  formState.medication = null;
+  resetMedicationSelection();
   formState.amount = '';
   renderTypeButtons();
   document.getElementById('step-medication').classList.add('hidden');
@@ -4635,7 +4816,7 @@ function clearForm() {
   formState.user = null;
   formState.baby = null;
   formState.type = null;
-  formState.medication = null;
+  resetMedicationSelection();
   formState.amount = '';
 
   renderUserButtons();

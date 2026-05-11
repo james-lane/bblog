@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260511-200225" />
-  <link rel="icon" href="/icon.svg?v=20260511-200225" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260511-201924" />
+  <link rel="icon" href="/icon.svg?v=20260511-201924" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260511-200225" />
+  <link rel="stylesheet" href="/styles.css?v=20260511-201924" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -135,14 +135,11 @@
       </div>
 
       <div class="form-group hidden" id="step-medication">
-        <h2>Which medication?</h2>
+        <h2>Which medications?</h2>
         <div class="med-alert">
           Always read the bottle before administering medication.
         </div>
-        <select id="medication-select" class="med-select">
-          <option value="">Select medication</option>
-        </select>
-        <div id="med-partial-warning" class="med-alert med-alert--warning hidden"></div>
+        <div id="medication-select" class="med-select-list"></div>
         <div id="medication-intervals"></div>
       </div>
 
@@ -355,6 +352,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260511-200225"></script>
+  <script src="/app.js?v=20260511-201924"></script>
 </body>
 </html>
