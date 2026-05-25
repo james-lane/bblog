@@ -497,6 +497,12 @@ main::before {
 .tab-panel { display: none; padding: 16px; }
 .tab-panel.active { display: block; }
 
+#tab-dashboard.active {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 #tab-charts.active {
   display: flex;
   flex-direction: column;
@@ -1452,8 +1458,7 @@ main::before {
   box-shadow: var(--shadow);
 }
 
-.dash-card + .dash-card,
-.dash-live-stats + .dash-card {
+.dash-card + .dash-card {
   margin-top: 14px;
 }
 
@@ -1577,16 +1582,10 @@ main::before {
 }
 
 .dash-live-stats {
-  display: flex;
-  flex-direction: column;
+  flex: 1;
+  display: grid;
+  grid-auto-rows: minmax(116px, 1fr);
   gap: 10px;
-}
-
-.dash-milk-chart {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
 }
 
 .charts-pagination {
@@ -2059,78 +2058,6 @@ main::before {
 
 .dash-weight-empty {
   padding: 26px 0;
-}
-
-.dash-milk-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  background: var(--surface-tint);
-  border-radius: var(--radius-sm);
-}
-
-@supports (color: color-mix(in srgb, red, white)) {
-  .dash-milk-metric {
-    background: color-mix(in srgb, var(--baby-colour, var(--accent)) 13%, var(--surface-tint));
-  }
-}
-
-.dash-milk-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
-.dash-milk-name {
-  min-width: 0;
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.dash-milk-count {
-  flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.dash-milk-values {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.dash-milk-value {
-  min-width: 0;
-  padding: 10px;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-}
-
-.dash-milk-label {
-  display: block;
-  color: var(--text-muted);
-  font-size: 0.62rem;
-  font-weight: 800;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.dash-milk-number {
-  display: block;
-  margin-top: 5px;
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 900;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
 }
 
 .dash-live-metric {

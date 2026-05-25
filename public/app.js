@@ -3819,6 +3819,14 @@ function formatMilkChartHour(timestamp, includeDate = false) {
   );
 }
 
+function formatMilkChartBucketLabel(timestamp, group, days) {
+  if (group.hours === 24) return formatMilkChartDate(timestamp, days <= 7);
+  if (days > 1) {
+    return [formatMilkChartDate(timestamp), formatMilkChartHour(timestamp)];
+  }
+  return formatMilkChartHour(timestamp);
+}
+
 function milkChartBucketStart(timestamp, group) {
   const bucket = new Date(timestamp);
   const intervalHours = milkChartGroupById(group).hours;
@@ -4469,7 +4477,6 @@ function renderMilkIntakeTrend(activeBabies) {
               <span class="charts-milk-metric-feeds">${escapeHtml(feeds === 1 ? '1 feed' : `${feeds} feeds`)}</span>
             </span>
             <span class="charts-milk-metric-values">
-              <span><small>Total</small>${escapeHtml(formatMilkAmount(stat.total))}</span>
               <span><small>Avg feed</small>${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
               <span><small>Avg gap</small>${escapeHtml(stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—')}</span>
             </span>
@@ -4511,9 +4518,7 @@ function initMilkIntakeChart(activeBabies) {
     type: 'bar',
     data: {
       labels: model.buckets.map((bucket) =>
-        group.hours < 24
-          ? formatMilkChartHour(bucket.timestamp, range.days > 1)
-          : formatMilkChartDate(bucket.timestamp, range.days <= 7),
+        formatMilkChartBucketLabel(bucket.timestamp, group, range.days),
       ),
       datasets: visibleBabies.map((baby) => ({
         label: baby.name,
@@ -4559,13 +4564,7 @@ function initMilkIntakeChart(activeBabies) {
             color: chartTextColor,
             autoSkip: group.hours < 24 || range.days > 7,
             maxTicksLimit:
-              group.hours < 24
-                ? range.days <= 1
-                  ? 8
-                  : 12
-                : range.days > 7
-                  ? 10
-                  : 7,
+              group.hours < 24 ? 8 : range.days > 7 ? 10 : 7,
           },
           grid: { display: false },
         },
@@ -5670,45 +5669,13 @@ function renderDashboard() {
   const liveStats = milkLiveStats(now);
   const latestWeights = latestWeightsByBaby();
   const live = document.getElementById('dash-live-stats');
-  const chart = document.getElementById('dash-milk-chart');
-  const rangeOptions = document.getElementById('dash-range-options');
-  const customRange = document.getElementById('dash-custom-range');
-  const rangeStart = document.getElementById('dash-range-start');
-  const rangeEnd = document.getElementById('dash-range-end');
-  const rangeSummary = document.getElementById('dash-range-summary');
   const activeBabies = babies();
-  const selectedRange = selectedMilkStatsRangeBounds(now);
-
-  if (rangeOptions) {
-    rangeOptions.innerHTML = MILK_STATS_RANGE_OPTIONS.map(
-      (option) => `
-      <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === selectedRange.id}" data-milk-range="${escapeHtml(option.id)}">
-        ${escapeHtml(option.name)}
-      </button>`,
-    ).join('');
-  }
-  if (customRange)
-    customRange.classList.toggle('hidden', selectedRange.id !== 'custom');
-  if (rangeStart)
-    rangeStart.value =
-      selectedRange.id === 'custom' ? _milkStatsCustomStart : '';
-  if (rangeEnd)
-    rangeEnd.value = selectedRange.id === 'custom' ? _milkStatsCustomEnd : '';
-  if (rangeSummary) rangeSummary.textContent = selectedRange.summary;
 
   if (!activeBabies.length) {
     live.innerHTML =
       '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
-    chart.innerHTML =
-      '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
     return;
   }
-
-  const intakeStats = milkIntakeStats(
-    selectedRange.start,
-    selectedRange.end,
-    activeBabies,
-  );
 
   live.innerHTML = activeBabies
     .map((baby) => {
@@ -5758,35 +5725,6 @@ function renderDashboard() {
           <span class="dash-live-last-amount" ${stats?.lastAt != null ? '' : 'hidden'}>${escapeHtml(
             lastAmountText,
           )}</span>
-        </div>
-      </div>`;
-    })
-    .join('');
-
-  chart.innerHTML = activeBabies
-    .map((baby) => {
-      const stat = intakeStats[baby.id] || {};
-      const feeds = stat.feeds || 0;
-      const feedsText = feeds === 1 ? '1 feed' : `${feeds} feeds`;
-      return `
-      <div class="dash-milk-metric" style="--baby-colour:${baby.colour}">
-        <div class="dash-milk-head">
-          <div class="dash-milk-name">${escapeHtml(baby.name)}</div>
-          <div class="dash-milk-count">${escapeHtml(feedsText)}</div>
-        </div>
-        <div class="dash-milk-values">
-          <div class="dash-milk-value">
-            <span class="dash-milk-label">Total</span>
-            <span class="dash-milk-number">${escapeHtml(formatMilkAmount(stat.total))}</span>
-          </div>
-          <div class="dash-milk-value">
-            <span class="dash-milk-label">Avg feed</span>
-            <span class="dash-milk-number">${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
-          </div>
-          <div class="dash-milk-value">
-            <span class="dash-milk-label">Avg gap</span>
-            <span class="dash-milk-number">${escapeHtml(stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—')}</span>
-          </div>
         </div>
       </div>`;
     })
@@ -6102,26 +6040,6 @@ function wireApp() {
       btn.addEventListener('click', () => openPersonForm(btn.dataset.addList)),
     );
 
-  document
-    .getElementById('dash-range-options')
-    .addEventListener('click', (event) => {
-      const btn = event.target.closest('[data-milk-range]');
-      if (!btn) return;
-      selectMilkStatsRange(btn.dataset.milkRange);
-      renderDashboard();
-    });
-  document
-    .getElementById('dash-range-start')
-    .addEventListener('input', (event) => {
-      setMilkStatsCustomRange('start', event.target.value);
-      renderDashboard();
-    });
-  document
-    .getElementById('dash-range-end')
-    .addEventListener('input', (event) => {
-      setMilkStatsCustomRange('end', event.target.value);
-      renderDashboard();
-    });
   document
     .getElementById('charts-pagination')
     .addEventListener('click', (event) => {
