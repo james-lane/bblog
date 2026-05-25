@@ -6135,7 +6135,7 @@ function renderDashboard() {
         </div>
         <div class="dash-live-rolling">
           <div class="dash-live-stat">
-            <span class="dash-live-stat-label">Previous feed</span>
+            <span class="dash-live-stat-label">Feed before last</span>
             <span class="dash-live-stat-value">${escapeHtml(previousAmountText)}</span>
           </div>
           <div class="dash-live-stat">
