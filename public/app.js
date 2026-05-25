@@ -1,6 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
+const APP_VERSION = 'bblog-v102';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -3403,11 +3404,6 @@ function formatWeightGrams(grams) {
   return `${Math.round(grams).toLocaleString()} g`;
 }
 
-function formatWeightWithGrams(grams) {
-  if (!Number.isFinite(grams) || grams <= 0) return '—';
-  return `${formatWeightLbOz(grams)} (${formatWeightGrams(grams)})`;
-}
-
 function formatWeightDate(isoString) {
   const d = new Date(isoString);
   if (!Number.isFinite(d.getTime())) return '';
@@ -4286,7 +4282,10 @@ function renderWeightSelectedMarkup(model, selectedAge) {
             <div class="dash-weight-readout-item" style="--baby-colour:${baby.colour}">
               <span class="dash-weight-readout-swatch" aria-hidden="true"></span>
               <span class="dash-weight-selected-name">${escapeHtml(baby.name)}</span>
-              <span class="dash-weight-selected-weight">${escapeHtml(formatWeightWithGrams(reading.grams))}</span>
+              <span class="dash-weight-selected-weight">
+                <span class="dash-weight-selected-imperial">${escapeHtml(formatWeightLbOz(reading.grams))}</span>
+                <span class="dash-weight-selected-grams">${escapeHtml(formatWeightGrams(reading.grams))}</span>
+              </span>
               <span class="dash-weight-selected-meta">${escapeHtml(weightReadingMeta(reading))}</span>
             </div>
           `,
@@ -6076,6 +6075,8 @@ function renderGrowthChartSettings() {
 }
 
 function renderSettings() {
+  const version = document.getElementById('settings-build-version');
+  if (version) version.textContent = APP_VERSION;
   renderSetupGuide();
   renderColorModeOptions();
   renderThemeOptions();

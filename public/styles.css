@@ -1138,6 +1138,30 @@ main::before {
 .sync-card > div { flex: 1; min-width: 0; }
 .sync-title { font-weight: 700; font-size: 1rem; }
 
+.settings-build-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.settings-build-label {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.settings-build-version {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .med-card-edit-btn,
 .settings-delete-btn {
   flex-shrink: 0;
@@ -1944,12 +1968,23 @@ main::before {
 }
 
 .dash-weight-selected-weight {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   color: var(--text);
   font-size: 1.1rem;
   font-weight: 900;
   line-height: 1;
   text-align: right;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+.dash-weight-selected-grams {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .dash-weight-selected-meta {
@@ -2022,8 +2057,6 @@ main::before {
   grid-row: 1 / 3;
   align-self: center;
   font-size: 1rem;
-  text-align: right;
-  white-space: nowrap;
 }
 
 .dash-weight-readout-item .dash-weight-selected-meta {
@@ -2049,6 +2082,7 @@ main::before {
   .dash-weight-readout-item .dash-weight-selected-weight {
     grid-column: 2;
     grid-row: 2;
+    align-items: flex-start;
     text-align: left;
   }
 

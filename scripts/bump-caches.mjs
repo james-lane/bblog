@@ -5,9 +5,11 @@ import process from 'node:process';
 const ROOT = process.cwd();
 const SW_PATH = path.join(ROOT, 'public', 'sw.js');
 const INDEX_PATH = path.join(ROOT, 'public', 'index.html');
+const APP_PATH = path.join(ROOT, 'public', 'app.js');
 const DRY_RUN = process.argv.includes('--dry-run');
 
 const CACHE_NAME_REGEX = /const CACHE_NAME = 'bblog-v(\d+)';/;
+const APP_VERSION_REGEX = /const APP_VERSION = 'bblog-v(\d+)';/;
 const VERSIONED_ASSETS = [
   '/styles.css',
   '/app.js',
@@ -54,6 +56,16 @@ function bumpAssetTokens(source, token) {
   return nextSource;
 }
 
+function updateAppVersion(source, version) {
+  if (!APP_VERSION_REGEX.test(source)) {
+    throw new Error('Could not find APP_VERSION in public/app.js');
+  }
+  return source.replace(
+    APP_VERSION_REGEX,
+    `const APP_VERSION = 'bblog-v${version}';`,
+  );
+}
+
 function assertChanged(before, after, filePath) {
   if (before === after) {
     throw new Error(`No cache token changes applied in ${filePath}`);
@@ -65,24 +77,28 @@ async function run() {
 
   const swInitial = await readFile(SW_PATH, 'utf8');
   const indexInitial = await readFile(INDEX_PATH, 'utf8');
+  const appInitial = await readFile(APP_PATH, 'utf8');
 
   const bumped = bumpCacheName(swInitial);
   const swUpdated = bumpAssetTokens(bumped.source, token);
   const indexUpdated = bumpAssetTokens(indexInitial, token);
+  const appUpdated = updateAppVersion(appInitial, bumped.next);
 
   assertChanged(swInitial, swUpdated, SW_PATH);
   assertChanged(indexInitial, indexUpdated, INDEX_PATH);
+  assertChanged(appInitial, appUpdated, APP_PATH);
 
   if (!DRY_RUN) {
     await writeFile(SW_PATH, swUpdated, 'utf8');
     await writeFile(INDEX_PATH, indexUpdated, 'utf8');
+    await writeFile(APP_PATH, appUpdated, 'utf8');
   }
 
   const mode = DRY_RUN ? 'Dry run only' : 'Updated';
   console.log(`${mode} cache values.`);
   console.log(`CACHE_NAME: bblog-v${bumped.previous} -> bblog-v${bumped.next}`);
   console.log(`Asset cache-bust token: ${token}`);
-  console.log(`Files: public/sw.js, public/index.html`);
+  console.log(`Files: public/sw.js, public/index.html, public/app.js`);
 }
 
 run().catch((error) => {
