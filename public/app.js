@@ -83,6 +83,7 @@ const MILK_STATS_RANGE_OPTIONS = [
 const CHART_PAGES = [
   { id: 'weight', name: 'Weight trend' },
   { id: 'milk', name: 'Milk intake' },
+  { id: 'express', name: 'Expressing' },
 ];
 const MILK_CHART_GROUP_OPTIONS = [
   { id: '6h', name: '6h', hours: 6, ariaName: '6-hour' },
@@ -1633,9 +1634,14 @@ let _demoMode = false;
 let _milkStatsRange = '24h';
 let _milkStatsCustomStart = '';
 let _milkStatsCustomEnd = '';
+let _expressStatsRange = '24h';
+let _expressStatsCustomStart = '';
+let _expressStatsCustomEnd = '';
 let _activeChartPage = 'weight';
 let _milkChartGroup = '24h';
+let _expressChartGroup = '24h';
 const _hiddenMilkChartBabyIds = new Set();
+const _hiddenExpressChartUserIds = new Set();
 let _medEditId = null;
 let _personEdit = null;
 let _selectedWeightAgeMonths = null;
@@ -1647,6 +1653,7 @@ let _weightGrowthView = {
 };
 let weightTrendChart = null;
 let milkIntakeChart = null;
+let expressingChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
 let _installSuggestionDismissed = false;
@@ -2536,6 +2543,7 @@ function normalizeData(value) {
     users: normalizeRecordList(source.users, (item) => ({
       id: item.id,
       name: String(item.name || item.label || '').trim() || 'Parent',
+      canExpress: item.canExpress === true,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       deletedAt: item.deletedAt || null,
@@ -2639,6 +2647,21 @@ function entries({ includeDeleted = false } = {}) {
 
 function findUser(id) {
   return users().find((u) => u.id === id);
+}
+
+function expressingParents() {
+  const loggedUserIds = new Set(
+    entries()
+      .filter((entry) => entry.type === 'express' && entry.user)
+      .map((entry) => entry.user),
+  );
+  const colours = currentBabyColours();
+  return users()
+    .filter((user) => user.canExpress || loggedUserIds.has(user.id))
+    .map((user, index) => ({
+      ...user,
+      colour: colours[index % colours.length],
+    }));
 }
 
 function findBaby(id) {
@@ -3214,7 +3237,10 @@ function showSetup() {
 }
 
 function hasRequiredSetup() {
-  return users().length > 0 && babies().length > 0;
+  return (
+    users().length > 0 &&
+    (babies().length > 0 || users().some((user) => user.canExpress))
+  );
 }
 
 function showApp() {
@@ -3233,6 +3259,9 @@ function activateDemoMode() {
   _milkStatsRange = '24h';
   _milkStatsCustomStart = '';
   _milkStatsCustomEnd = '';
+  _expressStatsRange = '24h';
+  _expressStatsCustomStart = '';
+  _expressStatsCustomEnd = '';
   session = { demo: true, rememberKey: false };
   data = buildDemoData();
   showApp();
@@ -3719,6 +3748,78 @@ function selectedMilkStatsRangeBounds(now = Date.now()) {
   };
 }
 
+function expressStatsRangeById(id) {
+  return (
+    MILK_STATS_RANGE_OPTIONS.find((option) => option.id === id) ||
+    MILK_STATS_RANGE_OPTIONS[0]
+  );
+}
+
+function ensureExpressStatsCustomRange(now = Date.now()) {
+  const today = dateInputValue(now);
+  if (!_expressStatsCustomStart) _expressStatsCustomStart = today;
+  if (!_expressStatsCustomEnd) _expressStatsCustomEnd = today;
+}
+
+function selectExpressStatsRange(id) {
+  const option = expressStatsRangeById(id);
+  _expressStatsRange = option.id;
+  if (_expressStatsRange === 'custom') ensureExpressStatsCustomRange();
+}
+
+function setExpressStatsCustomRange(field, value) {
+  ensureExpressStatsCustomRange();
+  if (field === 'start')
+    _expressStatsCustomStart = normalizeDateOnly(value) || '';
+  if (field === 'end') _expressStatsCustomEnd = normalizeDateOnly(value) || '';
+  _expressStatsRange = 'custom';
+}
+
+function selectedExpressStatsRangeBounds(now = Date.now()) {
+  const option = expressStatsRangeById(_expressStatsRange);
+  if (option.id !== 'custom') {
+    return {
+      id: option.id,
+      start: now - option.durationMs,
+      end: now,
+      summary: option.summary,
+      days: option.durationMs / 86400000,
+    };
+  }
+
+  ensureExpressStatsCustomRange(now);
+  let start = dateInputStartMs(_expressStatsCustomStart);
+  let end = dateInputEndMs(_expressStatsCustomEnd);
+
+  if (start == null || end == null) {
+    const today = dateInputValue(now);
+    _expressStatsCustomStart = today;
+    _expressStatsCustomEnd = today;
+    start = dateInputStartMs(today);
+    end = dateInputEndMs(today);
+  }
+
+  if (end <= start) {
+    const rangeStart = dateInputStartMs(_expressStatsCustomEnd);
+    const rangeEnd = dateInputEndMs(_expressStatsCustomStart);
+    if (rangeStart != null && rangeEnd != null && rangeEnd > rangeStart) {
+      start = rangeStart;
+      end = rangeEnd;
+    }
+  }
+
+  const startLabel = formatMilkRangeDate(start);
+  const endLabel = formatMilkRangeDate(end - 1);
+  return {
+    id: option.id,
+    start,
+    end,
+    summary:
+      startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
+    days: Math.max((end - start) / 86400000, 1),
+  };
+}
+
 function milkIntakeStats(start, end, activeBabies) {
   const stats = {};
   activeBabies.forEach((baby) => {
@@ -3758,6 +3859,39 @@ function milkIntakeStats(start, end, activeBabies) {
   return stats;
 }
 
+function expressingStats(start, end, activeParents) {
+  const stats = {};
+  activeParents.forEach((parent) => {
+    stats[parent.id] = {
+      total: 0,
+      sessions: 0,
+    };
+  });
+
+  for (const entry of entries()) {
+    const stat = stats[entry.user];
+    if (entry.type !== 'express' || !stat) continue;
+    const timestamp = new Date(entry.timestamp).getTime();
+    if (
+      !Number.isFinite(timestamp) ||
+      timestamp < start ||
+      timestamp >= end
+    )
+      continue;
+    const amount = milkAmount(entry);
+    if (amount <= 0) continue;
+
+    stat.total += amount;
+    stat.sessions += 1;
+  }
+
+  Object.values(stats).forEach((stat) => {
+    stat.avgSession = stat.sessions ? stat.total / stat.sessions : null;
+  });
+
+  return stats;
+}
+
 function visibleMilkChartBabies(activeBabies) {
   const visibleBabies = activeBabies.filter(
     (baby) => !_hiddenMilkChartBabyIds.has(baby.id),
@@ -3783,6 +3917,31 @@ function toggleMilkChartBaby(babyId, activeBabies) {
   return true;
 }
 
+function visibleExpressChartParents(activeParents) {
+  const visibleParents = activeParents.filter(
+    (parent) => !_hiddenExpressChartUserIds.has(parent.id),
+  );
+  if (!visibleParents.length && activeParents.length) {
+    _hiddenExpressChartUserIds.delete(activeParents[0].id);
+    return [activeParents[0]];
+  }
+  return visibleParents;
+}
+
+function toggleExpressChartParent(parentId, activeParents) {
+  const parent = activeParents.find((item) => item.id === parentId);
+  if (!parent) return false;
+
+  if (_hiddenExpressChartUserIds.has(parentId)) {
+    _hiddenExpressChartUserIds.delete(parentId);
+    return true;
+  }
+
+  if (visibleExpressChartParents(activeParents).length <= 1) return false;
+  _hiddenExpressChartUserIds.add(parentId);
+  return true;
+}
+
 function milkChartGroupById(id) {
   return (
     MILK_CHART_GROUP_OPTIONS.find((option) => option.id === id) ||
@@ -3792,6 +3951,10 @@ function milkChartGroupById(id) {
 
 function selectMilkChartGroup(id) {
   _milkChartGroup = milkChartGroupById(id).id;
+}
+
+function selectExpressChartGroup(id) {
+  _expressChartGroup = milkChartGroupById(id).id;
 }
 
 function formatMilkChartDate(timestamp, includeWeekday = false) {
@@ -3869,6 +4032,49 @@ function milkIntakeBuckets(start, end, activeBabies, group = '24h') {
     const bucketIndex = bucketIndexes.get(milkChartBucketStart(timestamp, group));
     if (bucketIndex == null) continue;
     totals[e.baby][bucketIndex] += amount;
+    total += amount;
+  }
+
+  return { buckets, totals, total };
+}
+
+function expressingBuckets(start, end, activeParents, group = '24h') {
+  const buckets = [];
+  const bucketIndexes = new Map();
+  const intervalHours = milkChartGroupById(group).hours;
+  const totals = Object.fromEntries(
+    activeParents.map((parent) => [parent.id, []]),
+  );
+  const firstBucket = new Date(milkChartBucketStart(start, group));
+  const finalBucket = milkChartBucketStart(Math.max(start, end - 1), group);
+
+  for (
+    let cursor = firstBucket;
+    cursor.getTime() <= finalBucket;
+    cursor = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate(),
+      cursor.getHours() + intervalHours,
+    )
+  ) {
+    const timestamp = cursor.getTime();
+    bucketIndexes.set(timestamp, buckets.length);
+    buckets.push({ timestamp });
+    activeParents.forEach((parent) => totals[parent.id].push(0));
+  }
+
+  let total = 0;
+  for (const entry of entries()) {
+    if (entry.type !== 'express' || !totals[entry.user]) continue;
+    const timestamp = new Date(entry.timestamp).getTime();
+    if (!Number.isFinite(timestamp) || timestamp < start || timestamp >= end)
+      continue;
+    const amount = milkAmount(entry);
+    if (amount <= 0) continue;
+    const bucketIndex = bucketIndexes.get(milkChartBucketStart(timestamp, group));
+    if (bucketIndex == null) continue;
+    totals[entry.user][bucketIndex] += amount;
     total += amount;
   }
 
@@ -4280,6 +4486,13 @@ function destroyMilkIntakeChart() {
   }
 }
 
+function destroyExpressingChart() {
+  if (expressingChart) {
+    expressingChart.destroy();
+    expressingChart = null;
+  }
+}
+
 function initWeightTrendChart(activeBabies) {
   destroyWeightTrendChart();
   const canvas = document.getElementById('dash-weight-canvas');
@@ -4582,6 +4795,176 @@ function initMilkIntakeChart(activeBabies) {
   if (scroll) scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
 }
 
+function renderExpressingTrend(activeParents) {
+  const range = selectedExpressStatsRangeBounds();
+  const group = milkChartGroupById(_expressChartGroup);
+  const visibleParents = visibleExpressChartParents(activeParents);
+  const stats = expressingStats(range.start, range.end, activeParents);
+  const model = expressingBuckets(
+    range.start,
+    range.end,
+    visibleParents,
+    group.id,
+  );
+  const denseChart = group.hours < 24 && model.buckets.length > 28;
+  const chartStyle = denseChart
+    ? ` style="--milk-chart-min-width:${Math.max(760, model.buckets.length * 18)}px"`
+    : '';
+  const emptyNote = model.total
+    ? ''
+    : '<p class="charts-milk-empty">No expressing logged for selected parents in this range.</p>';
+
+  return `
+    <div class="charts-milk-plot">
+      <div class="dash-range-options charts-milk-ranges" role="radiogroup" aria-label="Expressing chart range">
+        ${MILK_STATS_RANGE_OPTIONS.map(
+          (option) => `
+          <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === range.id}" data-express-chart-range="${escapeHtml(option.id)}">
+            ${escapeHtml(option.name)}
+          </button>`,
+        ).join('')}
+      </div>
+      <div class="dash-custom-range charts-milk-custom-range ${range.id === 'custom' ? '' : 'hidden'}">
+        <label class="dash-range-label">From
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_expressStatsCustomStart) : ''}" data-express-chart-date="start" />
+        </label>
+        <label class="dash-range-label">To
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_expressStatsCustomEnd) : ''}" data-express-chart-date="end" />
+        </label>
+      </div>
+      <div class="charts-milk-group-row">
+        <span class="charts-milk-group-label">Bars</span>
+        <div class="dash-range-options charts-milk-group" role="radiogroup" aria-label="Expressing bar grouping">
+          ${MILK_CHART_GROUP_OPTIONS.map(
+            (option) => `
+            <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === group.id}" data-express-chart-group="${escapeHtml(option.id)}">
+              ${escapeHtml(option.name)}
+            </button>`,
+          ).join('')}
+        </div>
+      </div>
+      <div class="charts-milk-metrics" aria-label="Expressing summaries">
+        ${activeParents
+          .map((parent) => {
+            const stat = stats[parent.id] || {};
+            const sessions = stat.sessions || 0;
+            const isVisible = !_hiddenExpressChartUserIds.has(parent.id);
+            const cannotHide = isVisible && visibleParents.length <= 1;
+            return `
+          <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-express-chart-parent="${escapeHtml(parent.id)}" style="--baby-colour:${parent.colour}" ${cannotHide ? 'disabled title="At least one parent must remain visible"' : ''}>
+            <span class="charts-milk-metric-head">
+              <span class="charts-milk-metric-name"><span class="charts-milk-baby-swatch" aria-hidden="true"></span>${escapeHtml(parent.name)}</span>
+              <span class="charts-milk-metric-feeds">${escapeHtml(sessions === 1 ? '1 session' : `${sessions} sessions`)}</span>
+            </span>
+            <span class="charts-milk-metric-values">
+              <span><small>Total</small>${escapeHtml(stat.total ? formatMilkAmount(stat.total) : '—')}</span>
+              <span><small>Avg session</small>${escapeHtml(stat.avgSession != null ? formatMilkAmount(stat.avgSession) : '—')}</span>
+            </span>
+          </button>`;
+          })
+          .join('')}
+      </div>
+      <div class="charts-milk-scroll ${denseChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${escapeHtml(group.ariaName)} expressing chart"${chartStyle}>
+        <div class="charts-milk-canvas-wrap">
+          <canvas id="charts-express-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${escapeHtml(group.ariaName)} expressing by parent"></canvas>
+        </div>
+      </div>
+      ${emptyNote}
+    </div>`;
+}
+
+function initExpressingChart(activeParents) {
+  destroyExpressingChart();
+  const canvas = document.getElementById('charts-express-canvas');
+  if (!canvas || !globalThis.Chart) return;
+
+  const range = selectedExpressStatsRangeBounds();
+  const group = milkChartGroupById(_expressChartGroup);
+  const visibleParents = visibleExpressChartParents(activeParents);
+  const model = expressingBuckets(
+    range.start,
+    range.end,
+    visibleParents,
+    group.id,
+  );
+  const rootStyles = getComputedStyle(document.documentElement);
+  const chartGridColor =
+    rootStyles.getPropertyValue('--chart-grid').trim() ||
+    'rgba(142, 142, 147, 0.22)';
+  const chartTextColor =
+    rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+
+  expressingChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: model.buckets.map((bucket) =>
+        formatMilkChartBucketLabel(bucket.timestamp, group, range.days),
+      ),
+      datasets: visibleParents.map((parent) => ({
+        label: parent.name,
+        data: model.totals[parent.id],
+        backgroundColor: parent.colour,
+        borderColor: parent.colour,
+        borderRadius: 4,
+        borderSkipped: false,
+        maxBarThickness: 34,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const bucket = model.buckets[items[0]?.dataIndex];
+              if (!bucket) return '';
+              return group.hours < 24
+                ? formatMilkChartHour(bucket.timestamp, true)
+                : formatMilkChartDate(bucket.timestamp);
+            },
+            label: (context) =>
+              `${context.dataset.label}: ${Math.round(context.parsed.y).toLocaleString()} ml`,
+            footer: (items) => {
+              const total = items.reduce(
+                (sum, item) => sum + Number(item.parsed.y || 0),
+                0,
+              );
+              return `Total: ${Math.round(total).toLocaleString()} ml`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: false,
+          ticks: {
+            color: chartTextColor,
+            autoSkip: group.hours < 24 || range.days > 7,
+            maxTicksLimit:
+              group.hours < 24 ? 8 : range.days > 7 ? 10 : 7,
+          },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: chartTextColor,
+            maxTicksLimit: 6,
+            precision: 0,
+            callback: (value) => `${Number(value).toLocaleString()} ml`,
+          },
+          grid: { color: chartGridColor },
+        },
+      },
+    },
+  });
+  const scroll = canvas.closest('.charts-milk-scroll--dense');
+  if (scroll) scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+}
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -4631,7 +5014,10 @@ function renderUserButtons() {
     'user-buttons',
     users(),
     'user',
-    () => updateSaveBtn(),
+    () => {
+      renderTypeButtons();
+      updateSaveBtn();
+    },
     'Add a parent in Settings.',
   );
 }
@@ -4714,12 +5100,20 @@ function updateWeightFromLbOzInputs() {
 }
 
 function renderTypeButtons() {
+  if (formState.type === 'express' && !findUser(formState.user)?.canExpress) {
+    formState.type = null;
+    formState.amount = '';
+    document.getElementById('amount-input').value = '';
+  }
   const types = [
     { id: 'milk', name: '🍼 Milk' },
     { id: 'medication', name: '💊 Meds' },
     { id: 'poo', name: '💩 Poop' },
     { id: 'weight', name: '⚖️ Weight' },
   ];
+  if (findUser(formState.user)?.canExpress) {
+    types.push({ id: 'express', name: '🍼 Express' });
+  }
 
   renderSelButtons('type-buttons', types, 'type', (selectedId) => {
     resetMedicationSelection();
@@ -5006,17 +5400,21 @@ function updateSaveBtn() {
   const medicationOk =
     selectedMeds.length > 0 &&
     selectedMeds.every(({ amount }) => parseFloat(amount) > 0);
+  const expressingOk =
+    formState.type !== 'express' || findUser(formState.user)?.canExpress;
   const medOk =
     formState.type === 'milk' ||
     formState.type === 'weight' ||
     formState.type === 'poo' ||
+    (formState.type === 'express' && expressingOk) ||
     (formState.type === 'medication' && medicationOk);
   const amountOk =
     formState.type === 'poo' ||
     formState.type === 'medication' ||
     parseFloat(formState.amount) > 0;
+  const babyOk = formState.type === 'express' || formState.baby;
   const ready =
-    formState.user && formState.baby && formState.type && medOk && amountOk;
+    formState.user && babyOk && formState.type && medOk && amountOk;
   document.getElementById('save-btn').disabled = !ready;
 }
 
@@ -5049,7 +5447,7 @@ async function saveEntry() {
         id: uid('entry_'),
         timestamp,
         user: formState.user,
-        baby: formState.baby,
+        baby: formState.type === 'express' ? null : formState.baby,
         type: formState.type,
         ...(formState.type !== 'poo' && {
           amount: parseFloat(formState.amount),
@@ -5069,6 +5467,7 @@ async function saveEntry() {
   });
 
   const baby = findBaby(formState.baby);
+  const user = findUser(formState.user);
   let detail;
   let amountStr = '';
   if (formState.type === 'medication') {
@@ -5087,7 +5486,9 @@ async function saveEntry() {
         ? 'Poo'
         : formState.type === 'weight'
           ? 'Weight'
-          : 'Milk';
+          : formState.type === 'express'
+            ? 'Expressed'
+            : 'Milk';
     amountStr =
       formState.type === 'weight'
         ? ` ${formatWeightLbOz(weightGrams(entry))}`
@@ -5096,7 +5497,11 @@ async function saveEntry() {
           : '';
   }
   const conf = document.getElementById('confirmation');
-  conf.textContent = `Saved - ${baby?.name || formState.baby}: ${detail}${amountStr}`;
+  const subject =
+    formState.type === 'express'
+      ? user?.name || formState.user
+      : baby?.name || formState.baby;
+  conf.textContent = `Saved - ${subject}: ${detail}${amountStr}`;
   conf.classList.remove('hidden');
   setTimeout(() => conf.classList.add('hidden'), 3000);
 
@@ -5173,13 +5578,17 @@ function renderLog() {
             ? 'Poo'
             : e.type === 'weight'
               ? 'Weight'
-              : 'Milk';
+              : e.type === 'express'
+                ? 'Expressed'
+                : 'Milk';
       const primary =
         e.type === 'poo'
           ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> had a moment`
           : e.type === 'weight'
             ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> weighed <span class="log-val">${escapeHtml(formatWeightLbOz(weightGrams(e)))}</span>`
-            : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
+            : e.type === 'express'
+              ? `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> <span class="log-val">${typeName}</span>`
+              : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
       const medOptions = medications()
         .map(
           (m) =>
@@ -5337,18 +5746,20 @@ function renderPersonCards(kind) {
   list.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'med-card';
-    const babyDetails = [];
+    const personDetails = [];
+    if (kind === 'users' && item.canExpress)
+      personDetails.push('Can express milk');
     if (kind === 'babies' && item.birthDate)
-      babyDetails.push(`Born ${formatBabyBirthDate(item.birthDate)}`);
+      personDetails.push(`Born ${formatBabyBirthDate(item.birthDate)}`);
     if (kind === 'babies' && item.dueDate)
-      babyDetails.push(`Due ${formatBabyBirthDate(item.dueDate)}`);
-    const birthDetail = babyDetails.length
-      ? `<div class="med-card-details">${escapeHtml(babyDetails.join(' · '))}</div>`
+      personDetails.push(`Due ${formatBabyBirthDate(item.dueDate)}`);
+    const personDetail = personDetails.length
+      ? `<div class="med-card-details">${escapeHtml(personDetails.join(' · '))}</div>`
       : '';
     card.innerHTML = `
       <div class="med-card-info">
         <div class="med-card-name">${escapeHtml(item.name)}</div>
-        ${birthDetail}
+        ${personDetail}
       </div>
       <button class="med-card-edit-btn" data-kind="${kind}" data-id="${item.id}" title="Edit">✎</button>
       <button class="settings-delete-btn" data-kind="${kind}" data-id="${item.id}" title="Delete">×</button>
@@ -5389,11 +5800,16 @@ function openPersonForm(kind, id = null) {
   const birthdateInput = document.getElementById('person-form-birthdate');
   const duedateLabel = document.getElementById('person-form-duedate-label');
   const duedateInput = document.getElementById('person-form-duedate');
+  const expressLabel = document.getElementById('person-form-express-label');
+  const expressInput = document.getElementById('person-form-can-express');
   const isBaby = kind === 'babies';
+  const isUser = kind === 'users';
   birthdateLabel.classList.toggle('hidden', !isBaby);
   duedateLabel.classList.toggle('hidden', !isBaby);
+  expressLabel.classList.toggle('hidden', !isUser);
   birthdateInput.value = isBaby ? item?.birthDate || '' : '';
   duedateInput.value = isBaby ? item?.dueDate || '' : '';
+  expressInput.checked = isUser && item?.canExpress === true;
   document.getElementById('person-form').classList.remove('hidden');
   document.getElementById('person-form-name').focus();
 }
@@ -5416,6 +5832,9 @@ async function savePersonForm() {
     _personEdit.kind === 'babies'
       ? normalizeDateOnly(document.getElementById('person-form-duedate').value)
       : null;
+  const canExpress =
+    _personEdit.kind === 'users' &&
+    document.getElementById('person-form-can-express').checked;
   const stamp = nowIso();
   await mutateData((next) => {
     if (_personEdit.id) {
@@ -5424,6 +5843,7 @@ async function savePersonForm() {
       );
       if (item) {
         item.name = name;
+        if (_personEdit.kind === 'users') item.canExpress = canExpress;
         if (_personEdit.kind === 'babies') {
           const previousBirthDate = normalizeDateOnly(item.birthDate);
           const previousDueDate = normalizeDateOnly(item.dueDate);
@@ -5448,6 +5868,7 @@ async function savePersonForm() {
         item.birthDateUpdatedAt = birthDate ? stamp : null;
         item.dueDateUpdatedAt = dueDate ? stamp : null;
       }
+      if (_personEdit.kind === 'users') item.canExpress = canExpress;
       next[_personEdit.kind].push(item);
     }
   });
@@ -5511,16 +5932,20 @@ function renderSetupGuide() {
 
   const missing = [];
   if (!users().length) missing.push('parent');
-  if (!babies().length) missing.push('baby');
+  if (!babies().length && !users().some((user) => user.canExpress))
+    missing.push('baby');
 
   card.classList.toggle('hidden', missing.length === 0);
   if (!missing.length) {
     detail.textContent = '';
   } else if (missing.length === 2) {
     detail.textContent =
-      'Add at least one parent and one baby before logging entries.';
+      'Add at least one parent and one baby before logging baby entries.';
   } else {
-    detail.textContent = `Add at least one ${missing[0]} before logging entries.`;
+    detail.textContent =
+      missing[0] === 'baby'
+        ? 'Add at least one baby before logging baby entries, or enable expressing on a parent.'
+        : 'Add at least one parent before logging entries.';
   }
 }
 
@@ -5748,6 +6173,7 @@ function renderCharts() {
   const activeBabies = babies();
   if (_activeChartPage === 'milk') {
     destroyWeightTrendChart();
+    destroyExpressingChart();
     if (title) title.textContent = 'Milk intake';
     if (summary) summary.textContent = selectedMilkStatsRangeBounds().summary;
     if (!activeBabies.length) {
@@ -5762,7 +6188,27 @@ function renderCharts() {
     return;
   }
 
+  if (_activeChartPage === 'express') {
+    destroyWeightTrendChart();
+    destroyMilkIntakeChart();
+    if (title) title.textContent = 'Expressing';
+    if (summary)
+      summary.textContent = selectedExpressStatsRangeBounds().summary;
+    const activeParents = expressingParents();
+    if (!activeParents.length) {
+      destroyExpressingChart();
+      chartContent.innerHTML =
+        '<p class="log-empty" style="padding:40px 0">Enable expressing for a parent in Settings to begin tracking.</p>';
+      return;
+    }
+
+    chartContent.innerHTML = renderExpressingTrend(activeParents);
+    initExpressingChart(activeParents);
+    return;
+  }
+
   destroyMilkIntakeChart();
+  destroyExpressingChart();
   if (title) title.textContent = 'Weight trend';
   if (summary) summary.textContent = growthSettingSummary();
   chartContent.innerHTML =
@@ -5865,6 +6311,7 @@ function setActiveTab(tabName) {
   if (tabName !== 'charts') {
     destroyWeightTrendChart();
     destroyMilkIntakeChart();
+    destroyExpressingChart();
   }
 }
 
@@ -6068,6 +6515,29 @@ function wireApp() {
   document
     .getElementById('charts-content')
     .addEventListener('click', (event) => {
+      const expressGroupBtn = event.target.closest('[data-express-chart-group]');
+      if (expressGroupBtn) {
+        selectExpressChartGroup(expressGroupBtn.dataset.expressChartGroup);
+        renderCharts();
+        return;
+      }
+      const parentBtn = event.target.closest('[data-express-chart-parent]');
+      if (parentBtn) {
+        if (
+          toggleExpressChartParent(
+            parentBtn.dataset.expressChartParent,
+            expressingParents(),
+          )
+        )
+          renderCharts();
+        return;
+      }
+      const expressRangeBtn = event.target.closest('[data-express-chart-range]');
+      if (expressRangeBtn) {
+        selectExpressStatsRange(expressRangeBtn.dataset.expressChartRange);
+        renderCharts();
+        return;
+      }
       const groupBtn = event.target.closest('[data-milk-chart-group]');
       if (groupBtn) {
         selectMilkChartGroup(groupBtn.dataset.milkChartGroup);
@@ -6088,6 +6558,15 @@ function wireApp() {
   document
     .getElementById('charts-content')
     .addEventListener('input', (event) => {
+      const expressInput = event.target.closest('[data-express-chart-date]');
+      if (expressInput) {
+        setExpressStatsCustomRange(
+          expressInput.dataset.expressChartDate,
+          expressInput.value,
+        );
+        renderCharts();
+        return;
+      }
       const input = event.target.closest('[data-milk-chart-date]');
       if (!input) return;
       setMilkStatsCustomRange(input.dataset.milkChartDate, input.value);

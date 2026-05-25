@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260525-093549" />
-  <link rel="icon" href="/icon.svg?v=20260525-093549" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260525-101654" />
+  <link rel="icon" href="/icon.svg?v=20260525-101654" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260525-093549" />
+  <link rel="stylesheet" href="/styles.css?v=20260525-101654" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -272,6 +272,10 @@
             <input id="person-form-duedate" class="med-form-input" type="date" autocomplete="off" />
             <span class="med-form-help">When set, due date is used as 0m on the weight growth chart.</span>
           </label>
+          <label id="person-form-express-label" class="person-form-toggle hidden">
+            <input id="person-form-can-express" type="checkbox" />
+            <span>Can express milk</span>
+          </label>
         </div>
         <div class="form-actions" style="margin-top:12px;">
           <button id="person-form-cancel" class="btn btn-secondary">Cancel</button>
@@ -337,6 +341,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260525-093549"></script>
+  <script src="/app.js?v=20260525-101654"></script>
 </body>
 </html>

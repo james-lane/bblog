@@ -1237,6 +1237,25 @@ main::before {
   text-transform: none;
 }
 
+.person-form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: var(--field-bg);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.person-form-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .med-alert {
   display: flex;
   align-items: flex-start;
