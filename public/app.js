@@ -3270,16 +3270,20 @@ function formatTime(isoString) {
   return `${dateStr} at ${timeStr}`;
 }
 
-function formatElapsed(ms) {
+function formatElapsed(ms, includeAgo = true) {
+  const suffix = includeAgo ? ' ago' : '';
   const totalMins = Math.floor(ms / 60000);
   if (totalMins < 1) return 'just now';
-  if (totalMins < 60) return `${totalMins}m ago`;
+  if (totalMins < 60) return `${totalMins}m${suffix}`;
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
-  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+  if (hours < 24)
+    return mins > 0 ? `${hours}h ${mins}m${suffix}` : `${hours}h${suffix}`;
   const days = Math.floor(hours / 24);
   const remHours = hours % 24;
-  return remHours > 0 ? `${days}d ${remHours}h ago` : `${days}d ago`;
+  return remHours > 0
+    ? `${days}d ${remHours}h${suffix}`
+    : `${days}d${suffix}`;
 }
 
 function formatDuration(ms) {
@@ -3292,13 +3296,6 @@ function formatDuration(ms) {
   const days = Math.floor(hours / 24);
   const remHours = hours % 24;
   return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
-}
-
-function splitElapsedAgo(text) {
-  const value = String(text || '');
-  return value.endsWith(' ago')
-    ? { value: value.slice(0, -4), hasAgo: true }
-    : { value, hasAgo: false };
 }
 
 function dateInputValue(timestamp = Date.now()) {
@@ -5686,9 +5683,8 @@ function renderDashboard() {
         : 'No weight yet';
       const lastFeed =
         stats?.lastAt != null
-          ? formatElapsed(now - stats.lastAt)
+          ? formatElapsed(now - stats.lastAt, false)
           : 'No feed yet';
-      const lastFeedParts = splitElapsedAgo(lastFeed);
       const avg = stats?.rollingFeeds
         ? Math.round(stats.rollingAmount / stats.rollingFeeds)
         : null;
@@ -5700,31 +5696,27 @@ function renderDashboard() {
       const lastAmountText =
         stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
       return `
-      <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour};--baby-ink:${readableInkFor(baby.colour)}">
-        <div class="dash-live-info">
-          <div class="dash-live-heading">
-            <div class="dash-live-name">${escapeHtml(baby.name)}</div>
-            <div class="dash-live-weight">${escapeHtml(weightText)}</div>
-          </div>
-          <div class="dash-live-rolling">
-            <div class="dash-live-stat">
-              <span class="dash-live-stat-label">Previous feed</span>
-              <span class="dash-live-stat-value">${escapeHtml(previousAmountText)}</span>
-            </div>
-            <div class="dash-live-stat-divider" aria-hidden="true"></div>
-            <div class="dash-live-stat">
-              <span class="dash-live-stat-label">24h avg</span>
-              <span class="dash-live-stat-value">${escapeHtml(avgText)}</span>
-            </div>
-          </div>
+      <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}">
+        <div class="dash-live-heading">
+          <div class="dash-live-name"><span class="dash-live-swatch" aria-hidden="true"></span>${escapeHtml(baby.name)}</div>
+          <div class="dash-live-weight">${escapeHtml(weightText)}</div>
         </div>
         <div class="dash-live-last">
           <span class="dash-live-last-label">Last feed</span>
-          <span class="dash-live-last-value">${escapeHtml(lastFeedParts.value)}</span>
-          <span class="dash-live-last-ago" ${lastFeedParts.hasAgo ? '' : 'hidden'}>ago</span>
+          <span class="dash-live-last-value">${escapeHtml(lastFeed)}</span>
           <span class="dash-live-last-amount" ${stats?.lastAt != null ? '' : 'hidden'}>${escapeHtml(
             lastAmountText,
           )}</span>
+        </div>
+        <div class="dash-live-rolling">
+          <div class="dash-live-stat">
+            <span class="dash-live-stat-label">Previous feed</span>
+            <span class="dash-live-stat-value">${escapeHtml(previousAmountText)}</span>
+          </div>
+          <div class="dash-live-stat">
+            <span class="dash-live-stat-label">24h avg</span>
+            <span class="dash-live-stat-value">${escapeHtml(avgText)}</span>
+          </div>
         </div>
       </div>`;
     })
@@ -5803,14 +5795,11 @@ function refreshDashboardLiveTimes() {
       const stats = liveStats[babyId];
       const lastFeed =
         stats?.lastAt != null
-          ? formatElapsed(now - stats.lastAt)
+          ? formatElapsed(now - stats.lastAt, false)
           : 'No feed yet';
-      const lastFeedParts = splitElapsedAgo(lastFeed);
       const valueEl = metric.querySelector('.dash-live-last-value');
-      const agoEl = metric.querySelector('.dash-live-last-ago');
       const amountEl = metric.querySelector('.dash-live-last-amount');
-      if (valueEl) valueEl.textContent = lastFeedParts.value;
-      if (agoEl) agoEl.hidden = !lastFeedParts.hasAgo;
+      if (valueEl) valueEl.textContent = lastFeed;
       if (amountEl) {
         amountEl.textContent =
           stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
