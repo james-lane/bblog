@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260511-201924" />
-  <link rel="icon" href="/icon.svg?v=20260511-201924" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260525-091250" />
+  <link rel="icon" href="/icon.svg?v=20260525-091250" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260511-201924" />
+  <link rel="stylesheet" href="/styles.css?v=20260525-091250" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -222,11 +222,12 @@
     <section id="tab-charts" class="tab-panel">
       <div class="dash-card">
         <div class="dash-card-header">
-          <span class="dash-card-title">Weight trend</span>
-          <span id="charts-weight-summary" class="dash-card-summary"></span>
+          <span id="charts-card-title" class="dash-card-title">Weight trend</span>
+          <span id="charts-card-summary" class="dash-card-summary"></span>
         </div>
-        <div id="charts-weight-chart" class="dash-weight-chart"></div>
+        <div id="charts-content" class="charts-content" role="tabpanel" aria-labelledby="charts-page-weight"></div>
       </div>
+      <div id="charts-pagination" class="charts-pagination" role="tablist" aria-label="Charts"></div>
     </section>
 
     <section id="tab-settings" class="tab-panel">
@@ -352,6 +353,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260511-201924"></script>
+  <script src="/app.js?v=20260525-091250"></script>
 </body>
 </html>

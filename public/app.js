@@ -80,6 +80,15 @@ const MILK_STATS_RANGE_OPTIONS = [
   },
   { id: 'custom', name: 'Dates', summary: 'Custom dates' },
 ];
+const CHART_PAGES = [
+  { id: 'weight', name: 'Weight trend' },
+  { id: 'milk', name: 'Milk intake' },
+];
+const MILK_CHART_GROUP_OPTIONS = [
+  { id: '6h', name: '6h', hours: 6, ariaName: '6-hour' },
+  { id: '12h', name: '12h', hours: 12, ariaName: '12-hour' },
+  { id: '24h', name: '24h', hours: 24, ariaName: '24-hour' },
+];
 // Source: WHO Child Growth Standards expanded tables for constructing national health cards.
 // Rows are [ageDays, L, M, S]. WHO's chart conversion is 1 month = 30.4375 days.
 const WHO_WEIGHT_FOR_AGE_LMS = {
@@ -1624,6 +1633,9 @@ let _demoMode = false;
 let _milkStatsRange = '24h';
 let _milkStatsCustomStart = '';
 let _milkStatsCustomEnd = '';
+let _activeChartPage = 'weight';
+let _milkChartGroup = '24h';
+const _hiddenMilkChartBabyIds = new Set();
 let _medEditId = null;
 let _personEdit = null;
 let _selectedWeightAgeMonths = null;
@@ -1634,6 +1646,7 @@ let _weightGrowthView = {
   max: WEIGHT_GROWTH_AGE_MIN + DEFAULT_WEIGHT_GROWTH_VIEW_MONTHS,
 };
 let weightTrendChart = null;
+let milkIntakeChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
 let _installSuggestionDismissed = false;
@@ -3748,6 +3761,115 @@ function milkIntakeStats(start, end, activeBabies) {
   return stats;
 }
 
+function visibleMilkChartBabies(activeBabies) {
+  const visibleBabies = activeBabies.filter(
+    (baby) => !_hiddenMilkChartBabyIds.has(baby.id),
+  );
+  if (!visibleBabies.length && activeBabies.length) {
+    _hiddenMilkChartBabyIds.delete(activeBabies[0].id);
+    return [activeBabies[0]];
+  }
+  return visibleBabies;
+}
+
+function toggleMilkChartBaby(babyId, activeBabies) {
+  const baby = activeBabies.find((item) => item.id === babyId);
+  if (!baby) return false;
+
+  if (_hiddenMilkChartBabyIds.has(babyId)) {
+    _hiddenMilkChartBabyIds.delete(babyId);
+    return true;
+  }
+
+  if (visibleMilkChartBabies(activeBabies).length <= 1) return false;
+  _hiddenMilkChartBabyIds.add(babyId);
+  return true;
+}
+
+function milkChartGroupById(id) {
+  return (
+    MILK_CHART_GROUP_OPTIONS.find((option) => option.id === id) ||
+    MILK_CHART_GROUP_OPTIONS[2]
+  );
+}
+
+function selectMilkChartGroup(id) {
+  _milkChartGroup = milkChartGroupById(id).id;
+}
+
+function formatMilkChartDate(timestamp, includeWeekday = false) {
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleDateString(
+    [],
+    includeWeekday
+      ? { weekday: 'short', day: 'numeric' }
+      : { day: 'numeric', month: 'short' },
+  );
+}
+
+function formatMilkChartHour(timestamp, includeDate = false) {
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
+  return d.toLocaleString(
+    [],
+    includeDate
+      ? { day: 'numeric', month: 'short', hour: 'numeric' }
+      : { hour: 'numeric' },
+  );
+}
+
+function milkChartBucketStart(timestamp, group) {
+  const bucket = new Date(timestamp);
+  const intervalHours = milkChartGroupById(group).hours;
+  const bucketHour = Math.floor(bucket.getHours() / intervalHours) * intervalHours;
+  bucket.setHours(bucketHour, 0, 0, 0);
+  return bucket.getTime();
+}
+
+function milkIntakeBuckets(start, end, activeBabies, group = '24h') {
+  const buckets = [];
+  const bucketIndexes = new Map();
+  const intervalHours = milkChartGroupById(group).hours;
+  const totals = Object.fromEntries(
+    activeBabies.map((baby) => [baby.id, []]),
+  );
+  const firstBucket = new Date(milkChartBucketStart(start, group));
+  const finalBucket = milkChartBucketStart(Math.max(start, end - 1), group);
+
+  for (
+    let cursor = firstBucket;
+    cursor.getTime() <= finalBucket;
+    cursor = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate(),
+      cursor.getHours() + intervalHours,
+    )
+  ) {
+    const timestamp = cursor.getTime();
+    bucketIndexes.set(timestamp, buckets.length);
+    buckets.push({ timestamp });
+    activeBabies.forEach((baby) => totals[baby.id].push(0));
+  }
+
+  let total = 0;
+  for (const e of entries()) {
+    if (e.type !== 'milk' || !totals[e.baby]) continue;
+    const timestamp = new Date(e.timestamp).getTime();
+    if (!Number.isFinite(timestamp) || timestamp < start || timestamp >= end)
+      continue;
+    const amount = milkAmount(e);
+    if (amount <= 0) continue;
+    const bucketIndex = bucketIndexes.get(milkChartBucketStart(timestamp, group));
+    if (bucketIndex == null) continue;
+    totals[e.baby][bucketIndex] += amount;
+    total += amount;
+  }
+
+  return { buckets, totals, total };
+}
+
 function weightTrendModel(activeBabies) {
   const seriesByBaby = weightTrendByBaby(activeBabies);
   const loggedSeries = activeBabies
@@ -4146,6 +4268,13 @@ function destroyWeightTrendChart() {
   }
 }
 
+function destroyMilkIntakeChart() {
+  if (milkIntakeChart) {
+    milkIntakeChart.destroy();
+    milkIntakeChart = null;
+  }
+}
+
 function initWeightTrendChart(activeBabies) {
   destroyWeightTrendChart();
   const canvas = document.getElementById('dash-weight-canvas');
@@ -4276,6 +4405,185 @@ function initWeightTrendChart(activeBabies) {
     },
   });
   wireWeightChartScrubber(canvas, weightTrendChart, model);
+}
+
+function renderMilkIntakeTrend(activeBabies) {
+  const range = selectedMilkStatsRangeBounds();
+  const group = milkChartGroupById(_milkChartGroup);
+  const visibleBabies = visibleMilkChartBabies(activeBabies);
+  const intakeStats = milkIntakeStats(range.start, range.end, activeBabies);
+  const model = milkIntakeBuckets(
+    range.start,
+    range.end,
+    visibleBabies,
+    group.id,
+  );
+  const denseMilkChart = group.hours < 24 && model.buckets.length > 28;
+  const milkChartStyle = denseMilkChart
+    ? ` style="--milk-chart-min-width:${Math.max(760, model.buckets.length * 18)}px"`
+    : '';
+  const emptyNote = model.total
+    ? ''
+    : '<p class="charts-milk-empty">No milk feeds logged for selected babies in this range.</p>';
+
+  return `
+    <div class="charts-milk-plot">
+      <div class="dash-range-options charts-milk-ranges" role="radiogroup" aria-label="Milk intake chart range">
+        ${MILK_STATS_RANGE_OPTIONS.map(
+          (option) => `
+          <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === range.id}" data-milk-chart-range="${escapeHtml(option.id)}">
+            ${escapeHtml(option.name)}
+          </button>`,
+        ).join('')}
+      </div>
+      <div class="dash-custom-range charts-milk-custom-range ${range.id === 'custom' ? '' : 'hidden'}">
+        <label class="dash-range-label">From
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_milkStatsCustomStart) : ''}" data-milk-chart-date="start" />
+        </label>
+        <label class="dash-range-label">To
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_milkStatsCustomEnd) : ''}" data-milk-chart-date="end" />
+        </label>
+      </div>
+      <div class="charts-milk-group-row">
+        <span class="charts-milk-group-label">Bars</span>
+        <div class="dash-range-options charts-milk-group" role="radiogroup" aria-label="Milk intake bar grouping">
+          ${MILK_CHART_GROUP_OPTIONS.map(
+            (option) => `
+            <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === group.id}" data-milk-chart-group="${escapeHtml(option.id)}">
+              ${escapeHtml(option.name)}
+            </button>`,
+          ).join('')}
+        </div>
+      </div>
+      <div class="charts-milk-metrics" aria-label="Milk intake summaries">
+        ${activeBabies
+          .map((baby) => {
+            const stat = intakeStats[baby.id] || {};
+            const feeds = stat.feeds || 0;
+            const isVisible = !_hiddenMilkChartBabyIds.has(baby.id);
+            const cannotHide = isVisible && visibleBabies.length <= 1;
+            return `
+          <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-milk-chart-baby="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}" ${cannotHide ? 'disabled title="At least one baby must remain visible"' : ''}>
+            <span class="charts-milk-metric-head">
+              <span class="charts-milk-metric-name"><span class="charts-milk-baby-swatch" aria-hidden="true"></span>${escapeHtml(baby.name)}</span>
+              <span class="charts-milk-metric-feeds">${escapeHtml(feeds === 1 ? '1 feed' : `${feeds} feeds`)}</span>
+            </span>
+            <span class="charts-milk-metric-values">
+              <span><small>Total</small>${escapeHtml(formatMilkAmount(stat.total))}</span>
+              <span><small>Avg feed</small>${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
+              <span><small>Avg gap</small>${escapeHtml(stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—')}</span>
+            </span>
+          </button>`;
+          })
+          .join('')}
+      </div>
+      <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${escapeHtml(group.ariaName)} milk intake chart"${milkChartStyle}>
+        <div class="charts-milk-canvas-wrap">
+          <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${escapeHtml(group.ariaName)} milk intake by baby"></canvas>
+        </div>
+      </div>
+      ${emptyNote}
+    </div>`;
+}
+
+function initMilkIntakeChart(activeBabies) {
+  destroyMilkIntakeChart();
+  const canvas = document.getElementById('charts-milk-canvas');
+  if (!canvas || !globalThis.Chart) return;
+
+  const range = selectedMilkStatsRangeBounds();
+  const group = milkChartGroupById(_milkChartGroup);
+  const visibleBabies = visibleMilkChartBabies(activeBabies);
+  const model = milkIntakeBuckets(
+    range.start,
+    range.end,
+    visibleBabies,
+    group.id,
+  );
+  const rootStyles = getComputedStyle(document.documentElement);
+  const chartGridColor =
+    rootStyles.getPropertyValue('--chart-grid').trim() ||
+    'rgba(142, 142, 147, 0.22)';
+  const chartTextColor =
+    rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+
+  milkIntakeChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: model.buckets.map((bucket) =>
+        group.hours < 24
+          ? formatMilkChartHour(bucket.timestamp, range.days > 1)
+          : formatMilkChartDate(bucket.timestamp, range.days <= 7),
+      ),
+      datasets: visibleBabies.map((baby) => ({
+        label: baby.name,
+        data: model.totals[baby.id],
+        backgroundColor: baby.colour,
+        borderColor: baby.colour,
+        borderRadius: 4,
+        borderSkipped: false,
+        maxBarThickness: 34,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const bucket = model.buckets[items[0]?.dataIndex];
+              if (!bucket) return '';
+              return group.hours < 24
+                ? formatMilkChartHour(bucket.timestamp, true)
+                : formatMilkChartDate(bucket.timestamp);
+            },
+            label: (context) =>
+              `${context.dataset.label}: ${Math.round(context.parsed.y).toLocaleString()} ml`,
+            footer: (items) => {
+              const total = items.reduce(
+                (sum, item) => sum + Number(item.parsed.y || 0),
+                0,
+              );
+              return `Total: ${Math.round(total).toLocaleString()} ml`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: false,
+          ticks: {
+            color: chartTextColor,
+            autoSkip: group.hours < 24 || range.days > 7,
+            maxTicksLimit:
+              group.hours < 24
+                ? range.days <= 1
+                  ? 8
+                  : 12
+                : range.days > 7
+                  ? 10
+                  : 7,
+          },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: chartTextColor,
+            maxTicksLimit: 6,
+            precision: 0,
+            callback: (value) => `${Number(value).toLocaleString()} ml`,
+          },
+          grid: { color: chartGridColor },
+        },
+      },
+    },
+  });
+  const scroll = canvas.closest('.charts-milk-scroll--dense');
+  if (scroll) scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
 }
 
 function escapeHtml(str) {
@@ -5489,12 +5797,47 @@ function renderDashboard() {
 }
 
 function renderCharts() {
-  const weightChart = document.getElementById('charts-weight-chart');
-  if (!weightChart) return;
-  const summary = document.getElementById('charts-weight-summary');
-  if (summary) summary.textContent = growthSettingSummary();
+  const chartContent = document.getElementById('charts-content');
+  const pagination = document.getElementById('charts-pagination');
+  if (!chartContent || !pagination) return;
+  const title = document.getElementById('charts-card-title');
+  const summary = document.getElementById('charts-card-summary');
+  const paginationScrollLeft = pagination.scrollLeft;
+  pagination.innerHTML = CHART_PAGES.map(
+    (page) => `
+    <button id="charts-page-${escapeHtml(page.id)}" class="charts-page-pill" type="button" role="tab" aria-controls="charts-content" aria-selected="${page.id === _activeChartPage}" tabindex="${page.id === _activeChartPage ? '0' : '-1'}" data-chart-page="${escapeHtml(page.id)}">
+      ${escapeHtml(page.name)}
+    </button>`,
+  ).join('');
+  pagination.scrollLeft = paginationScrollLeft;
+  chartContent.setAttribute(
+    'aria-labelledby',
+    `charts-page-${_activeChartPage}`,
+  );
 
   const activeBabies = babies();
+  if (_activeChartPage === 'milk') {
+    destroyWeightTrendChart();
+    if (title) title.textContent = 'Milk intake';
+    if (summary) summary.textContent = selectedMilkStatsRangeBounds().summary;
+    if (!activeBabies.length) {
+      destroyMilkIntakeChart();
+      chartContent.innerHTML =
+        '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+      return;
+    }
+
+    chartContent.innerHTML = renderMilkIntakeTrend(activeBabies);
+    initMilkIntakeChart(activeBabies);
+    return;
+  }
+
+  destroyMilkIntakeChart();
+  if (title) title.textContent = 'Weight trend';
+  if (summary) summary.textContent = growthSettingSummary();
+  chartContent.innerHTML =
+    '<div id="charts-weight-chart" class="dash-weight-chart"></div>';
+  const weightChart = document.getElementById('charts-weight-chart');
   if (!activeBabies.length) {
     destroyWeightTrendChart();
     weightChart.innerHTML =
@@ -5592,7 +5935,10 @@ function setActiveTab(tabName) {
   if (tabName === 'dashboard') renderDashboard();
   if (tabName === 'charts') renderCharts();
   if (tabName !== 'dashboard') clearTimeout(dashboardClockTimer);
-  if (tabName !== 'charts') destroyWeightTrendChart();
+  if (tabName !== 'charts') {
+    destroyWeightTrendChart();
+    destroyMilkIntakeChart();
+  }
 }
 
 async function copyText(text) {
@@ -5775,6 +6121,70 @@ function wireApp() {
     .addEventListener('input', (event) => {
       setMilkStatsCustomRange('end', event.target.value);
       renderDashboard();
+    });
+  document
+    .getElementById('charts-pagination')
+    .addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-chart-page]');
+      if (
+        !btn ||
+        !CHART_PAGES.some((page) => page.id === btn.dataset.chartPage)
+      )
+        return;
+      _activeChartPage = btn.dataset.chartPage;
+      renderCharts();
+    });
+  document
+    .getElementById('charts-pagination')
+    .addEventListener('keydown', (event) => {
+      const btn = event.target.closest('[data-chart-page]');
+      const currentIndex = CHART_PAGES.findIndex(
+        (page) => page.id === btn?.dataset.chartPage,
+      );
+      if (currentIndex < 0) return;
+
+      const navigationKeys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!navigationKeys.includes(event.key)) return;
+      let nextIndex = currentIndex;
+      if (event.key === 'ArrowLeft')
+        nextIndex = (currentIndex - 1 + CHART_PAGES.length) % CHART_PAGES.length;
+      if (event.key === 'ArrowRight')
+        nextIndex = (currentIndex + 1) % CHART_PAGES.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = CHART_PAGES.length - 1;
+
+      event.preventDefault();
+      _activeChartPage = CHART_PAGES[nextIndex].id;
+      renderCharts();
+      document.getElementById(`charts-page-${_activeChartPage}`)?.focus();
+    });
+  document
+    .getElementById('charts-content')
+    .addEventListener('click', (event) => {
+      const groupBtn = event.target.closest('[data-milk-chart-group]');
+      if (groupBtn) {
+        selectMilkChartGroup(groupBtn.dataset.milkChartGroup);
+        renderCharts();
+        return;
+      }
+      const babyBtn = event.target.closest('[data-milk-chart-baby]');
+      if (babyBtn) {
+        if (toggleMilkChartBaby(babyBtn.dataset.milkChartBaby, babies()))
+          renderCharts();
+        return;
+      }
+      const btn = event.target.closest('[data-milk-chart-range]');
+      if (!btn) return;
+      selectMilkStatsRange(btn.dataset.milkChartRange);
+      renderCharts();
+    });
+  document
+    .getElementById('charts-content')
+    .addEventListener('input', (event) => {
+      const input = event.target.closest('[data-milk-chart-date]');
+      if (!input) return;
+      setMilkStatsCustomRange(input.dataset.milkChartDate, input.value);
+      renderCharts();
     });
   document.getElementById('sync-now-btn').addEventListener('click', () => {
     syncNow({ quiet: false, force: true }).catch(() => {});

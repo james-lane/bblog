@@ -499,6 +499,8 @@ main::before {
 
 #tab-charts.active {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-height: 100%;
   height: 100%;
 }
@@ -1564,6 +1566,7 @@ main::before {
   flex-shrink: 0;
 }
 
+#tab-charts .charts-content,
 #tab-charts .dash-weight-chart,
 #tab-charts .dash-weight-plot {
   flex: 1;
@@ -1584,6 +1587,237 @@ main::before {
   flex-direction: column;
   gap: 10px;
   margin-top: 10px;
+}
+
+.charts-pagination {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.charts-pagination::-webkit-scrollbar {
+  display: none;
+}
+
+.charts-page-pill {
+  flex: 0 0 auto;
+  height: 42px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.charts-page-pill:active {
+  opacity: 0.72;
+}
+
+.charts-page-pill[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.charts-milk-plot {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.charts-milk-ranges {
+  flex-shrink: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.charts-milk-custom-range {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.charts-milk-custom-range .dash-range-input {
+  height: 38px;
+}
+
+.charts-milk-group-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.charts-milk-group-label {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.charts-milk-group {
+  width: 184px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.charts-milk-group .dash-range-option {
+  height: 32px;
+  font-size: 0.72rem;
+}
+
+.charts-milk-baby-swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--baby-colour, var(--accent));
+}
+
+.charts-milk-metrics {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.charts-milk-metrics::-webkit-scrollbar {
+  display: none;
+}
+
+.charts-milk-metric {
+  flex: 1 0 calc((100% - 8px) / 2);
+  min-width: 158px;
+  border: 1px solid transparent;
+  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-tint);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (color: color-mix(in srgb, red, white)) {
+  .charts-milk-metric[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--baby-colour, var(--accent)) 12%, var(--surface-tint));
+    border-color: color-mix(in srgb, var(--baby-colour, var(--accent)) 32%, transparent);
+  }
+}
+
+.charts-milk-metric:active:not(:disabled) {
+  opacity: 0.72;
+}
+
+.charts-milk-metric[aria-pressed="false"] {
+  opacity: 0.52;
+}
+
+.charts-milk-metric[aria-pressed="false"] .charts-milk-baby-swatch {
+  opacity: 0.35;
+}
+
+.charts-milk-metric:disabled {
+  cursor: default;
+}
+
+.charts-milk-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.charts-milk-metric-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.charts-milk-metric-feeds {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.charts-milk-metric-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.charts-milk-metric-values small {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-size: 0.53rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.charts-milk-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 190px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.charts-milk-canvas-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 190px;
+}
+
+.charts-milk-scroll--dense .charts-milk-canvas-wrap {
+  width: max(100%, var(--milk-chart-min-width, 760px));
+}
+
+.charts-milk-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.charts-milk-empty {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .dash-weight-chart {
