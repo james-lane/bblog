@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v102';
+const APP_VERSION = 'bblog-v105';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -25,6 +25,8 @@ const THEME_STORAGE_KEY = 'bblog-theme';
 const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
 const WEIGHT_GROWTH_SEX_STORAGE_KEY = 'bblog-weight-growth-sex';
 const WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY = 'bblog-weight-growth-percentiles';
+const MEDICATION_NOTIFICATION_HISTORY_KEY = 'bblog-medication-notifications';
+const MEDICATION_NOTIFICATION_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_THEME_ID = 'playroom';
 const DEFAULT_COLOR_MODE = 'system';
 const DEFAULT_WEIGHT_GROWTH_SEX = 'boys';
@@ -1629,6 +1631,8 @@ let session = null;
 let syncInFlight = null;
 let syncTimer = null;
 let dashboardClockTimer = null;
+let medicationReminderTimer = null;
+let medicationNotificationInFlight = false;
 let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
@@ -2535,6 +2539,32 @@ function normalizeTimestamp(value) {
 function normalizeData(value) {
   const stamp = nowIso();
   const source = value && typeof value === 'object' ? value : {};
+  const normalizedBabies = normalizeRecordList(source.babies, (item) => {
+    const birthDate = normalizeDateOnly(
+      item.birthDate || item.dateOfBirth || item.dob,
+    );
+    const dueDate = normalizeDateOnly(
+      item.dueDate || item.estimatedDueDate || item.edd,
+    );
+    return {
+      id: item.id,
+      name: String(item.name || item.label || '').trim() || 'Baby',
+      birthDate,
+      dueDate,
+      birthDateUpdatedAt:
+        normalizeTimestamp(item.birthDateUpdatedAt) ||
+        (birthDate ? item.updatedAt : null),
+      dueDateUpdatedAt:
+        normalizeTimestamp(item.dueDateUpdatedAt) ||
+        (dueDate ? item.updatedAt : null),
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      deletedAt: item.deletedAt || null,
+    };
+  });
+  const legacyMedicationBabyIds = normalizedBabies
+    .filter((baby) => !baby.deletedAt)
+    .map((baby) => baby.id);
   const result = {
     schemaVersion: 1,
     meta: {
@@ -2549,33 +2579,14 @@ function normalizeData(value) {
       updatedAt: item.updatedAt,
       deletedAt: item.deletedAt || null,
     })),
-    babies: normalizeRecordList(source.babies, (item) => {
-      const birthDate = normalizeDateOnly(
-        item.birthDate || item.dateOfBirth || item.dob,
-      );
-      const dueDate = normalizeDateOnly(
-        item.dueDate || item.estimatedDueDate || item.edd,
-      );
-      return {
-        id: item.id,
-        name: String(item.name || item.label || '').trim() || 'Baby',
-        birthDate,
-        dueDate,
-        birthDateUpdatedAt:
-          normalizeTimestamp(item.birthDateUpdatedAt) ||
-          (birthDate ? item.updatedAt : null),
-        dueDateUpdatedAt:
-          normalizeTimestamp(item.dueDateUpdatedAt) ||
-          (dueDate ? item.updatedAt : null),
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        deletedAt: item.deletedAt || null,
-      };
-    }),
+    babies: normalizedBabies,
     medications: normalizeRecordList(source.medications, (item) => ({
       id: item.id,
       label: String(item.label || item.name || '').trim() || 'Medication',
       unit: String(item.unit || 'ml').trim() || 'ml',
+      babyIds: Array.isArray(item.babyIds)
+        ? [...new Set(item.babyIds.map(String).filter(Boolean))]
+        : legacyMedicationBabyIds,
       ...(item.defaultAmount != null && item.defaultAmount !== ''
         ? { defaultAmount: Number(item.defaultAmount) }
         : {}),
@@ -2673,9 +2684,22 @@ function findMed(id) {
   return medications().find((m) => m.id === id);
 }
 
+function medicationAssignedToBaby(med, babyId) {
+  return Boolean(babyId && med?.babyIds?.includes(babyId));
+}
+
+function medicationsForBaby(babyId) {
+  return medications().filter((med) => medicationAssignedToBaby(med, babyId));
+}
+
 function selectedMedicationIds() {
+  const availableMedications =
+    formState.type === 'medication' && formState.baby
+      ? medicationsForBaby(formState.baby)
+      : medications();
+  const availableIds = new Set(availableMedications.map((med) => med.id));
   return Object.keys(formState.medicationDoses || {}).filter((id) =>
-    findMed(id),
+    availableIds.has(id),
   );
 }
 
@@ -3231,6 +3255,7 @@ async function joinWithAccessKey(rawKey) {
 }
 
 function showSetup() {
+  clearTimeout(medicationReminderTimer);
   document.getElementById('setup-screen').classList.remove('hidden');
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
@@ -5029,8 +5054,11 @@ function renderBabyButtons() {
     (id) => {
       updateSaveBtn();
       if (formState.type === 'medication') {
+        resetMedicationSelection();
         renderMedButtons();
         renderMedIntervals(id);
+        updateUnitLabel();
+        updateSaveBtn();
       }
     },
     'Add a baby in Settings.',
@@ -5201,6 +5229,83 @@ function latestMedicationEntry(medicationId, babyId, now = Date.now()) {
   return latest;
 }
 
+function medicationSchedules(now = Date.now()) {
+  const schedules = [];
+
+  babies().forEach((baby) => {
+    medicationsForBaby(baby.id).forEach((med) => {
+      const intervalHours = Number(med.intervalHours);
+      if (!Number.isFinite(intervalHours) || intervalHours <= 0) return;
+
+      const intervalMs = intervalHours * 3600 * 1000;
+      const last = latestMedicationEntry(med.id, baby.id, now);
+      const lastAt = new Date(last?.timestamp || '').getTime();
+
+      if (!last || !Number.isFinite(lastAt)) {
+        schedules.push({
+          baby,
+          med,
+          last: null,
+          intervalMs,
+          dueAt: null,
+          notificationAt: null,
+          status: 'not-started',
+        });
+        return;
+      }
+
+      const dueAt = lastAt + intervalMs;
+      const notificationAt = dueAt - intervalMs * 0.25;
+      let status = 'upcoming';
+      if (now >= dueAt) status = 'overdue';
+      else if (now >= notificationAt) status = 'due-soon';
+
+      schedules.push({
+        baby,
+        med,
+        last,
+        intervalMs,
+        dueAt,
+        notificationAt,
+        status,
+      });
+    });
+  });
+
+  return schedules;
+}
+
+function medicationSchedulesForBaby(babyId, now = Date.now()) {
+  return medicationSchedules(now).filter(
+    (schedule) => schedule.baby.id === babyId,
+  );
+}
+
+function formatMedicationDuration(ms) {
+  return ms < 60000 ? '< 1m' : formatDuration(ms);
+}
+
+function medicationScheduleText(schedule, now = Date.now()) {
+  if (schedule.status === 'not-started') return 'No dose recorded';
+  if (schedule.status === 'overdue') {
+    const overdueFor = Math.max(0, now - schedule.dueAt);
+    return overdueFor < 60000
+      ? 'Due now'
+      : `Overdue ${formatMedicationDuration(overdueFor)}`;
+  }
+
+  const remaining = formatMedicationDuration(
+    Math.max(0, schedule.dueAt - now),
+  );
+  return schedule.status === 'due-soon'
+    ? `Due soon - ${remaining} left`
+    : `Due in ${remaining}`;
+}
+
+function medicationNotificationKey(schedule) {
+  return `${schedule.last?.id || 'unstarted'}:${schedule.intervalMs}`;
+}
+
 function medicationDosePrefill(med, babyId, now = Date.now()) {
   const defaultAmount = medicationDefaultAmount(med);
   const result = { amount: defaultAmount, warning: '' };
@@ -5241,11 +5346,17 @@ function medicationDetailText(med) {
 
 function renderMedButtons() {
   const container = document.getElementById('medication-select');
-  const meds = medications();
+  const meds = medicationsForBaby(formState.baby);
+
+  if (!formState.baby) {
+    container.innerHTML =
+      '<p class="inline-empty">Choose a baby to see their medications.</p>';
+    return;
+  }
 
   if (!meds.length) {
     container.innerHTML =
-      '<p class="inline-empty">Add medications in Settings.</p>';
+      '<p class="inline-empty">No medications are assigned to this baby.</p>';
     return;
   }
 
@@ -5331,41 +5442,17 @@ function renderMedButtons() {
 
 function renderMedIntervals(babyId) {
   const el = document.getElementById('medication-intervals');
-  const intervalMeds = medications().filter((m) => m.intervalHours);
-  if (!intervalMeds.length || !babyId) {
+  const now = Date.now();
+  const schedules = medicationSchedulesForBaby(babyId, now);
+  if (!schedules.length || !babyId) {
     el.innerHTML = '';
     return;
   }
 
-  const lastTaken = {};
-  for (const e of entries()) {
-    if (
-      e.type === 'medication' &&
-      e.baby === babyId &&
-      e.medication &&
-      !(e.medication in lastTaken)
-    ) {
-      lastTaken[e.medication] = e;
-    }
-  }
-
-  const now = Date.now();
-  el.innerHTML = intervalMeds
-    .map((med) => {
-      const last = lastTaken[med.id];
-      const intervalMs = med.intervalHours * 3600 * 1000;
-      let timeStr;
-      let status;
-      let elapsedMs;
-      if (!last) {
-        timeStr = 'not yet given';
-        status = 'overdue';
-        elapsedMs = Infinity;
-      } else {
-        elapsedMs = now - new Date(last.timestamp).getTime();
-        timeStr = formatElapsed(elapsedMs);
-        status = elapsedMs >= intervalMs ? 'overdue' : 'ok';
-      }
+  el.innerHTML = schedules
+    .map((schedule) => {
+      const { med, last } = schedule;
+      const timeStr = medicationScheduleText(schedule, now);
       let amountStr = '';
       let partial = false;
       if (last?.amount != null) {
@@ -5373,18 +5460,24 @@ function renderMedIntervals(babyId) {
         if (
           med.defaultAmount != null &&
           last.amount < med.defaultAmount &&
-          elapsedMs < intervalMs
+          schedule.status !== 'overdue'
         ) {
           partial = true;
         }
       }
       const rowClass = partial
         ? 'med-interval-row--partial'
-        : `med-interval-row--${status}`;
+        : `med-interval-row--${schedule.status}`;
+      const badge =
+        schedule.status === 'upcoming'
+          ? '✓'
+          : schedule.status === 'not-started'
+            ? '-'
+            : '!';
       return `<div class="med-interval-row ${rowClass}">
         <span class="med-interval-name">${escapeHtml(med.label)}</span>
-        <span class="med-interval-time">${timeStr}${escapeHtml(amountStr)}</span>
-        <span class="med-interval-badge">${status === 'ok' ? '✓' : '!'}</span>
+        <span class="med-interval-time">${escapeHtml(timeStr)}${escapeHtml(amountStr)}</span>
+        <span class="med-interval-badge">${badge}</span>
       </div>`;
     })
     .join('');
@@ -5588,7 +5681,11 @@ function renderLog() {
             : e.type === 'express'
               ? `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> <span class="log-val">${typeName}</span>`
               : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
-      const medOptions = medications()
+      const editableMedications = medicationsForBaby(e.baby);
+      if (med && !editableMedications.some((item) => item.id === med.id)) {
+        editableMedications.unshift(med);
+      }
+      const medOptions = editableMedications
         .map(
           (m) =>
             `<option value="${m.id}" ${e.medication === m.id ? 'selected' : ''}>${escapeHtml(m.label)}</option>`,
@@ -5885,10 +5982,16 @@ function renderMedCards() {
     return;
   }
   meds.forEach((med) => {
+    const assignedBabyNames = babies()
+      .filter((baby) => medicationAssignedToBaby(med, baby.id))
+      .map((baby) => baby.name);
     const details = [
       med.unit,
       med.defaultAmount != null ? `${med.defaultAmount} fixed` : null,
       med.intervalHours != null ? `every ${med.intervalHours}h` : null,
+      assignedBabyNames.length
+        ? assignedBabyNames.join(', ')
+        : 'No babies assigned',
     ]
       .filter(Boolean)
       .join(' · ');
@@ -5922,6 +6025,27 @@ function renderMedCards() {
       });
     }),
   );
+}
+
+function renderMedFormBabies(selectedBabyIds = []) {
+  const el = document.getElementById('med-form-babies');
+  const selectedIds = new Set(selectedBabyIds);
+  const activeBabies = babies();
+
+  if (!activeBabies.length) {
+    el.innerHTML = '<p class="inline-empty">Add a baby before assigning medication.</p>';
+    return;
+  }
+
+  el.innerHTML = activeBabies
+    .map(
+      (baby) => `
+        <label class="med-baby-option" style="--baby-colour:${baby.colour}">
+          <input type="checkbox" data-med-baby-id="${escapeHtml(baby.id)}" ${selectedIds.has(baby.id) ? 'checked' : ''} />
+          <span>${escapeHtml(baby.name)}</span>
+        </label>`,
+    )
+    .join('');
 }
 
 function renderSetupGuide() {
@@ -5958,6 +6082,7 @@ function openMedForm(id = null) {
   document.getElementById('med-form-unit').value = med?.unit || 'ml';
   document.getElementById('med-form-amount').value = med?.defaultAmount ?? '';
   document.getElementById('med-form-interval').value = med?.intervalHours ?? '';
+  renderMedFormBabies(med?.babyIds || []);
   document.getElementById('med-form').classList.remove('hidden');
   document.getElementById('add-med-btn').classList.add('hidden');
   document.getElementById('med-form-label').focus();
@@ -5978,6 +6103,9 @@ async function saveMedForm() {
   const unit = document.getElementById('med-form-unit').value.trim() || 'ml';
   const amtRaw = document.getElementById('med-form-amount').value.trim();
   const intRaw = document.getElementById('med-form-interval').value.trim();
+  const babyIds = [
+    ...document.querySelectorAll('#med-form-babies [data-med-baby-id]:checked'),
+  ].map((input) => input.dataset.medBabyId);
   const stamp = nowIso();
 
   await mutateData((next) => {
@@ -5985,6 +6113,7 @@ async function saveMedForm() {
       id: _medEditId || slugify(label, 'med_'),
       label,
       unit,
+      babyIds,
       createdAt: stamp,
       updatedAt: stamp,
       deletedAt: null,
@@ -6074,6 +6203,160 @@ function renderGrowthChartSettings() {
   });
 }
 
+function medicationNotificationsAvailable() {
+  return typeof Notification !== 'undefined' && globalThis.isSecureContext;
+}
+
+function medicationNotificationKeys() {
+  try {
+    const stored = JSON.parse(
+      localStorage.getItem(MEDICATION_NOTIFICATION_HISTORY_KEY) || '[]',
+    );
+    return new Set(Array.isArray(stored) ? stored : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberMedicationNotifications(schedules) {
+  const keys = medicationNotificationKeys();
+  schedules.forEach((schedule) => keys.add(medicationNotificationKey(schedule)));
+  try {
+    localStorage.setItem(
+      MEDICATION_NOTIFICATION_HISTORY_KEY,
+      JSON.stringify([...keys].slice(-100)),
+    );
+  } catch {
+    /* notification display remains useful without persisted de-duplication */
+  }
+}
+
+function medicationNotificationCopy(schedules) {
+  const items = schedules
+    .slice(0, 3)
+    .map((schedule) => `${schedule.baby.name}: ${schedule.med.label}`);
+  const remaining = schedules.length - items.length;
+  const extra = remaining > 0 ? ` and ${remaining} more` : '';
+  return `${items.join('; ')}${extra}.`;
+}
+
+async function showMedicationNotification(schedules) {
+  const anyOverdue = schedules.some((schedule) => schedule.status === 'overdue');
+  const title = anyOverdue ? 'Medication due' : 'Medication due soon';
+  const options = {
+    body: medicationNotificationCopy(schedules),
+    icon: '/icon.svg',
+    tag: 'medication-due',
+    renotify: true,
+    data: { url: '/' },
+  };
+
+  if ('serviceWorker' in navigator) {
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration?.showNotification) {
+      await registration.showNotification(title, options);
+      return;
+    }
+  }
+
+  new Notification(title, options);
+}
+
+async function checkMedicationNotifications(now = Date.now()) {
+  if (
+    medicationNotificationInFlight ||
+    !data ||
+    !medicationNotificationsAvailable() ||
+    Notification.permission !== 'granted'
+  )
+    return;
+
+  const notified = medicationNotificationKeys();
+  const dueSchedules = medicationSchedules(now).filter(
+    (schedule) =>
+      (schedule.status === 'due-soon' || schedule.status === 'overdue') &&
+      !notified.has(medicationNotificationKey(schedule)),
+  );
+  if (!dueSchedules.length) return;
+
+  medicationNotificationInFlight = true;
+  try {
+    await showMedicationNotification(dueSchedules);
+    rememberMedicationNotifications(dueSchedules);
+  } catch {
+    /* browsers may decline notification display after granting permission */
+  } finally {
+    medicationNotificationInFlight = false;
+  }
+}
+
+function scheduleMedicationReminderCheck(now = Date.now()) {
+  clearTimeout(medicationReminderTimer);
+  if (
+    !data ||
+    !medicationNotificationsAvailable() ||
+    Notification.permission !== 'granted'
+  )
+    return;
+
+  checkMedicationNotifications(now).catch(() => {});
+  const nextNotificationAt = medicationSchedules(now)
+    .map((schedule) => schedule.notificationAt)
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > now)
+    .sort((left, right) => left - right)[0];
+  if (!nextNotificationAt) return;
+
+  const delay = Math.min(
+    MEDICATION_NOTIFICATION_MAX_DELAY_MS,
+    Math.max(1000, nextNotificationAt - now + 100),
+  );
+  medicationReminderTimer = setTimeout(scheduleMedicationReminderCheck, delay);
+}
+
+function renderMedicationReminderSettings() {
+  const detail = document.getElementById('medication-reminder-detail');
+  const button = document.getElementById('medication-reminder-btn');
+  if (!detail || !button) return;
+
+  if (!medicationNotificationsAvailable()) {
+    detail.textContent =
+      'Notifications are not supported in this browser or connection.';
+    button.textContent = 'Unavailable';
+    button.disabled = true;
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    detail.textContent =
+      'On - one alert is sent when 25% of a repeat interval remains while bblog is running.';
+    button.textContent = 'Enabled';
+    button.disabled = true;
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    detail.textContent =
+      'Notifications are blocked. Allow them in browser settings to receive reminders.';
+    button.textContent = 'Blocked';
+    button.disabled = true;
+    return;
+  }
+
+  detail.textContent =
+    'Get one alert when assigned repeat medications are due soon, while bblog is running.';
+  button.textContent = 'Enable';
+  button.disabled = false;
+}
+
+async function requestMedicationNotifications() {
+  if (!medicationNotificationsAvailable()) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+  renderMedicationReminderSettings();
+  scheduleMedicationReminderCheck();
+}
+
 function renderSettings() {
   const version = document.getElementById('settings-build-version');
   if (version) version.textContent = APP_VERSION;
@@ -6084,7 +6367,64 @@ function renderSettings() {
   renderPersonCards('babies');
   renderGrowthChartSettings();
   renderMedCards();
+  renderMedicationReminderSettings();
   updateSyncUi();
+}
+
+function medicationScheduleClass(status) {
+  if (status === 'due-soon') return 'due-soon';
+  if (status === 'overdue') return 'overdue';
+  if (status === 'not-started') return 'not-started';
+  return 'upcoming';
+}
+
+function renderDashboardMedicationRows(baby, now = Date.now()) {
+  const schedules = medicationSchedulesForBaby(baby.id, now);
+  if (!schedules.length) return '';
+
+  const dueSchedules = schedules.filter(
+    (schedule) =>
+      schedule.status === 'due-soon' || schedule.status === 'overdue',
+  );
+  const rows =
+    dueSchedules.length > 1
+      ? [
+          {
+            summary: 'Multiple medications due',
+            status: dueSchedules.some(
+              (schedule) => schedule.status === 'overdue',
+            )
+              ? 'overdue'
+              : 'due-soon',
+          },
+          ...schedules.filter((schedule) => !dueSchedules.includes(schedule)),
+        ]
+      : schedules;
+
+  return rows
+    .map(
+      (schedule) =>
+        schedule.summary
+          ? `
+        <div class="dash-medication-row dash-medication-row--${medicationScheduleClass(schedule.status)}">
+          <span class="dash-medication-name">${escapeHtml(schedule.summary)}</span>
+        </div>`
+          : `
+        <div class="dash-medication-row dash-medication-row--${medicationScheduleClass(schedule.status)}">
+          <span class="dash-medication-name">${escapeHtml(schedule.med.label)}</span>
+          <span class="dash-medication-time">${escapeHtml(medicationScheduleText(schedule, now))}</span>
+        </div>`,
+    )
+    .join('');
+}
+
+function renderDashboardMedicationSection(baby, now = Date.now()) {
+  const rows = renderDashboardMedicationRows(baby, now);
+  if (!rows) return '';
+  return `
+    <div class="dash-medications" data-medication-baby-id="${escapeHtml(baby.id)}">
+      ${rows}
+    </div>`;
 }
 
 function renderDashboard() {
@@ -6127,6 +6467,7 @@ function renderDashboard() {
           <div class="dash-live-name"><span class="dash-live-swatch" aria-hidden="true"></span>${escapeHtml(baby.name)}</div>
           <div class="dash-live-weight">${escapeHtml(weightText)}</div>
         </div>
+        ${renderDashboardMedicationSection(baby, now)}
         <div class="dash-live-last">
           <span class="dash-live-last-label">Last feed</span>
           <span class="dash-live-last-value">${escapeHtml(lastFeed)}</span>
@@ -6252,6 +6593,11 @@ function refreshDashboardLiveTimes() {
           stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
         amountEl.hidden = stats?.lastAt == null;
       }
+      const medicationEl = metric.querySelector('[data-medication-baby-id]');
+      const baby = findBaby(babyId);
+      if (medicationEl && baby) {
+        medicationEl.innerHTML = renderDashboardMedicationRows(baby, now);
+      }
     });
 }
 
@@ -6295,6 +6641,7 @@ function renderAll() {
   renderSettings();
   updateUnitLabel();
   updateSaveBtn();
+  scheduleMedicationReminderCheck();
 }
 
 function setActiveTab(tabName) {
@@ -6466,6 +6813,11 @@ function wireApp() {
     .getElementById('med-form-save')
     .addEventListener('click', saveMedForm);
   document
+    .getElementById('medication-reminder-btn')
+    .addEventListener('click', () => {
+      requestMedicationNotifications().catch(() => {});
+    });
+  document
     .getElementById('person-form-cancel')
     .addEventListener('click', closePersonForm);
   document
@@ -6619,6 +6971,7 @@ function wireApp() {
     if (document.visibilityState === 'visible') {
       refreshDashboardLiveTimes();
       scheduleDashboardClockRefresh();
+      scheduleMedicationReminderCheck();
     } else {
       clearTimeout(dashboardClockTimer);
     }
@@ -6630,6 +6983,8 @@ function wireApp() {
   setInterval(() => {
     updateSyncUi();
     refreshDashboardLiveTimes();
+    if (formState.type === 'medication') renderMedIntervals(formState.baby);
+    checkMedicationNotifications().catch(() => {});
   }, 15000);
 }
 

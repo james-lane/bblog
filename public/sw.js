@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bblog-v102';
+const CACHE_NAME = 'bblog-v105';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260525-150736',
+  '/styles.css?v=20260526-200435',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260525-150736',
-  '/manifest.webmanifest?v=20260525-150736',
-  '/icon.svg?v=20260525-150736',
+  '/app.js?v=20260526-200435',
+  '/manifest.webmanifest?v=20260526-200435',
+  '/icon.svg?v=20260526-200435',
 ];
 
 self.addEventListener('install', (event) => {
@@ -63,5 +63,19 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => caches.match(request)),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((windows) => {
+        const current = windows.find(
+          (client) => new URL(client.url).origin === self.location.origin,
+        );
+        return current ? current.focus() : self.clients.openWindow('/');
+      }),
   );
 });

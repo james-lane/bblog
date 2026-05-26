@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260525-150736" />
-  <link rel="icon" href="/icon.svg?v=20260525-150736" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260526-200435" />
+  <link rel="icon" href="/icon.svg?v=20260526-200435" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260525-150736" />
+  <link rel="stylesheet" href="/styles.css?v=20260526-200435" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -304,10 +304,26 @@
           <label class="med-form-label">Repeat every (hours)
             <input id="med-form-interval" class="med-form-input" type="number" placeholder="leave blank if no interval" min="0" step="any" />
           </label>
+          <fieldset class="med-baby-fieldset">
+            <legend>Babies taking this medication</legend>
+            <div id="med-form-babies" class="med-baby-options"></div>
+            <span class="med-form-help">Assignments control due times, logging choices, and reminders.</span>
+          </fieldset>
         </div>
         <div class="form-actions" style="margin-top:12px;">
           <button id="med-form-cancel" class="btn btn-secondary">Cancel</button>
           <button id="med-form-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Medication reminders</h2>
+        <div class="medication-reminder-card">
+          <div>
+            <div class="medication-reminder-title">Due-soon alerts</div>
+            <div id="medication-reminder-detail" class="medication-reminder-detail"></div>
+          </div>
+          <button id="medication-reminder-btn" class="medication-reminder-btn" type="button">Enable</button>
         </div>
       </div>
 
@@ -349,6 +365,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260525-150736"></script>
+  <script src="/app.js?v=20260526-200435"></script>
 </body>
 </html>

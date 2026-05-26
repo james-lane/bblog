@@ -80,4 +80,10 @@ The UI writes to an encrypted IndexedDB vault immediately. When the network is u
 
 If "Remember on this device" is enabled, the access key is stored in the browser profile so the app can reopen offline. Use the device passcode and browser profile protections for local device security.
 
+## Medication reminders
+
+Assign medications to babies in Settings and set a repeat interval to show per-baby due times on the dashboard. With notifications enabled, bblog sends one due-soon notification when 25% of an interval remains, combining medications that become due together.
+
+Medication schedules stay encrypted on the device, so reminder checks run while bblog is running rather than through a server-side push schedule.
+
 [deploy-vercel]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog&project-name=bblog&repository-name=bblog&env=BBLOG_FAMILY_ACCESS_KEY&envDescription=Required%3A+choose+a+long+family+access+key+for+this+one-vault+bblog+instance.+Add+Vercel+Blob+after+deploy+only+if+you+want+family+sharing+across+devices.&envLink=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog%23deploy-on-vercel
