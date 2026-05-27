@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v111';
+const APP_VERSION = 'bblog-v112';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -5286,7 +5286,7 @@ function medicationSchedulesForBaby(babyId, now = Date.now()) {
 }
 
 function medicationStatusForBaby(babyId, now = Date.now()) {
-  if (!findBaby(babyId) || !medications().length) return null;
+  if (!findBaby(babyId)) return null;
   const schedules = medicationSchedulesForBaby(babyId, now);
   if (schedules.some((schedule) => schedule.status === 'overdue')) {
     return 'overdue';
