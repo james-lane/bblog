@@ -82,7 +82,7 @@ If "Remember on this device" is enabled, the access key is stored in the browser
 
 ## Medication reminders
 
-Assign medications to babies in Settings and set a repeat interval to show per-baby due times on the dashboard. With notifications enabled, bblog sends one due-soon notification when 25% of an interval remains, combining medications that become due together.
+Assign medications to babies in Settings and set a repeat interval to show due-soon and overdue alerts on the dashboard. With notifications enabled, bblog sends one due-soon notification when 25% of an interval remains, combining medications that become due together.
 
 Medication schedules stay encrypted on the device, so reminder checks run while bblog is running rather than through a server-side push schedule.
 

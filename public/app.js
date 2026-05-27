@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v105';
+const APP_VERSION = 'bblog-v111';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -3328,7 +3328,7 @@ function formatTime(isoString) {
 function formatElapsed(ms, includeAgo = true) {
   const suffix = includeAgo ? ' ago' : '';
   const totalMins = Math.floor(ms / 60000);
-  if (totalMins < 1) return 'just now';
+  if (totalMins < 1) return 'Just now';
   if (totalMins < 60) return `${totalMins}m${suffix}`;
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
@@ -5053,6 +5053,7 @@ function renderBabyButtons() {
     'baby',
     (id) => {
       updateSaveBtn();
+      updateMedicationTypeButtonStatus();
       if (formState.type === 'medication') {
         resetMedicationSelection();
         renderMedButtons();
@@ -5182,7 +5183,10 @@ function renderTypeButtons() {
 
     updateUnitLabel();
     updateSaveBtn();
+    updateMedicationTypeButtonStatus();
   });
+
+  updateMedicationTypeButtonStatus();
 
   if (!formState.type)
     document.getElementById('amount-group').classList.add('hidden');
@@ -5279,6 +5283,44 @@ function medicationSchedulesForBaby(babyId, now = Date.now()) {
   return medicationSchedules(now).filter(
     (schedule) => schedule.baby.id === babyId,
   );
+}
+
+function medicationStatusForBaby(babyId, now = Date.now()) {
+  if (!findBaby(babyId) || !medications().length) return null;
+  const schedules = medicationSchedulesForBaby(babyId, now);
+  if (schedules.some((schedule) => schedule.status === 'overdue')) {
+    return 'overdue';
+  }
+  if (schedules.some((schedule) => schedule.status === 'due-soon')) {
+    return 'due-soon';
+  }
+  return 'ok';
+}
+
+function updateMedicationTypeButtonStatus(now = Date.now()) {
+  const medBtn = document.querySelector(
+    '#type-buttons .sel-btn[data-id="medication"]',
+  );
+  if (!medBtn) return;
+
+  medBtn.querySelector('.med-status-dot')?.remove();
+  medBtn.removeAttribute('aria-label');
+
+  const status = medicationStatusForBaby(formState.baby, now);
+  if (!status) return;
+
+  const dot = document.createElement('span');
+  dot.className = `med-status-dot med-status-dot--${status}`;
+  dot.setAttribute('aria-hidden', 'true');
+  medBtn.appendChild(dot);
+
+  const label =
+    status === 'overdue'
+      ? 'overdue'
+      : status === 'due-soon'
+        ? 'due soon'
+        : 'not due';
+  medBtn.setAttribute('aria-label', `Meds, ${label}`);
 }
 
 function formatMedicationDuration(ms) {
@@ -6380,28 +6422,23 @@ function medicationScheduleClass(status) {
 
 function renderDashboardMedicationRows(baby, now = Date.now()) {
   const schedules = medicationSchedulesForBaby(baby.id, now);
-  if (!schedules.length) return '';
-
-  const dueSchedules = schedules.filter(
-    (schedule) =>
-      schedule.status === 'due-soon' || schedule.status === 'overdue',
+  const dueSoon = schedules.filter(
+    (schedule) => schedule.status === 'due-soon',
   );
-  const rows =
-    dueSchedules.length > 1
-      ? [
-          {
-            summary: 'Multiple medications due',
-            status: dueSchedules.some(
-              (schedule) => schedule.status === 'overdue',
-            )
-              ? 'overdue'
-              : 'due-soon',
-          },
-          ...schedules.filter((schedule) => !dueSchedules.includes(schedule)),
-        ]
-      : schedules;
+  const overdue = schedules.filter(
+    (schedule) => schedule.status === 'overdue',
+  );
+  const dashboardRows = [
+    ...(overdue.length > 1
+      ? [{ summary: 'Multiple medications overdue', status: 'overdue' }]
+      : overdue),
+    ...(dueSoon.length > 1
+      ? [{ summary: 'Multiple medications due', status: 'due-soon' }]
+      : dueSoon),
+  ];
+  if (!dashboardRows.length) return '';
 
-  return rows
+  return dashboardRows
     .map(
       (schedule) =>
         schedule.summary
@@ -6420,9 +6457,8 @@ function renderDashboardMedicationRows(baby, now = Date.now()) {
 
 function renderDashboardMedicationSection(baby, now = Date.now()) {
   const rows = renderDashboardMedicationRows(baby, now);
-  if (!rows) return '';
   return `
-    <div class="dash-medications" data-medication-baby-id="${escapeHtml(baby.id)}">
+    <div class="dash-medications${rows ? '' : ' hidden'}" data-medication-baby-id="${escapeHtml(baby.id)}">
       ${rows}
     </div>`;
 }
@@ -6596,7 +6632,9 @@ function refreshDashboardLiveTimes() {
       const medicationEl = metric.querySelector('[data-medication-baby-id]');
       const baby = findBaby(babyId);
       if (medicationEl && baby) {
-        medicationEl.innerHTML = renderDashboardMedicationRows(baby, now);
+        const medicationRows = renderDashboardMedicationRows(baby, now);
+        medicationEl.innerHTML = medicationRows;
+        medicationEl.classList.toggle('hidden', !medicationRows);
       }
     });
 }
@@ -6983,6 +7021,7 @@ function wireApp() {
   setInterval(() => {
     updateSyncUi();
     refreshDashboardLiveTimes();
+    updateMedicationTypeButtonStatus();
     if (formState.type === 'medication') renderMedIntervals(formState.baby);
     checkMedicationNotifications().catch(() => {});
   }, 15000);
