@@ -187,6 +187,41 @@ async function handleVault(req, res, url) {
   sendJson(res, 405, { error: 'method_not_allowed' });
 }
 
+async function handleNotifications(req, res, url) {
+  if (req.method === 'GET') {
+    if (url.searchParams.get('status') === '1') {
+      sendJson(res, 200, {
+        ok: true,
+        available: false,
+        instanceKeyConfigured: Boolean(instanceFamilyId),
+        pushConfigured: false,
+        storageConfigured: false,
+        vapidPublicKey: '',
+        message:
+          'Background Web Push reminders are available on deployed Vercel instances with VAPID keys and Blob storage.',
+      });
+      return;
+    }
+
+    sendJson(res, 200, { ok: true, sent: 0, localDev: true });
+    return;
+  }
+
+  if (req.method === 'PUT' || req.method === 'DELETE') {
+    await readBody(req).catch(() => ({}));
+    sendJson(res, 503, {
+      error: 'background_notifications_unavailable',
+      ok: false,
+      available: false,
+      message:
+        'Background Web Push reminders are not dispatched by the local dev server.',
+    });
+    return;
+  }
+
+  sendJson(res, 405, { error: 'method_not_allowed' });
+}
+
 async function serveStatic(req, res, url) {
   const cleanPath = url.pathname === '/' ? '/index.html' : url.pathname;
   const safePath = normalize(cleanPath).replace(/^(\.\.[/\\])+/, '');
@@ -217,6 +252,10 @@ const server = createServer(async (req, res) => {
   try {
     if (url.pathname === '/api/vault') {
       await handleVault(req, res, url);
+      return;
+    }
+    if (url.pathname === '/api/notifications') {
+      await handleNotifications(req, res, url);
       return;
     }
     await serveStatic(req, res, url);

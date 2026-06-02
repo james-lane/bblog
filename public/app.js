@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v117';
+const APP_VERSION = 'bblog-v118';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -26,7 +26,10 @@ const COLOR_MODE_STORAGE_KEY = 'bblog-color-mode';
 const WEIGHT_GROWTH_SEX_STORAGE_KEY = 'bblog-weight-growth-sex';
 const WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY = 'bblog-weight-growth-percentiles';
 const MEDICATION_NOTIFICATION_HISTORY_KEY = 'bblog-medication-notifications';
+const MEDICATION_BACKGROUND_PUSH_KEY = 'bblog-background-medication-push-at';
 const MEDICATION_NOTIFICATION_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
+const MEDICATION_BACKGROUND_NOTIFICATION_SYNC_DELAY_MS = 1200;
+const MEDICATION_BACKGROUND_NOTIFICATION_REFRESH_MS = 5 * 60 * 1000;
 const DEFAULT_THEME_ID = 'playroom';
 const DEFAULT_COLOR_MODE = 'system';
 const DEFAULT_WEIGHT_GROWTH_SEX = 'boys';
@@ -1632,7 +1635,19 @@ let syncInFlight = null;
 let syncTimer = null;
 let dashboardClockTimer = null;
 let medicationReminderTimer = null;
+let medicationBackgroundReminderTimer = null;
 let medicationNotificationInFlight = false;
+let medicationBackgroundNotificationSyncInFlight = null;
+let medicationBackgroundNotificationStatusInFlight = null;
+let medicationBackgroundNotificationStatusFetchedAt = 0;
+let medicationBackgroundNotificationReady = false;
+let medicationBackgroundNotificationError = '';
+let medicationBackgroundNotificationStatus = {
+  loaded: false,
+  available: false,
+  vapidPublicKey: '',
+  message: '',
+};
 let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
@@ -3349,6 +3364,9 @@ async function joinWithAccessKey(rawKey) {
 
 function showSetup() {
   clearTimeout(medicationReminderTimer);
+  clearTimeout(medicationBackgroundReminderTimer);
+  medicationBackgroundNotificationReady = false;
+  medicationBackgroundNotificationError = '';
   document.getElementById('setup-screen').classList.remove('hidden');
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
@@ -6345,6 +6363,117 @@ function medicationNotificationsAvailable() {
   return typeof Notification !== 'undefined' && globalThis.isSecureContext;
 }
 
+function medicationPushNotificationsSupported() {
+  return (
+    medicationNotificationsAvailable() &&
+    'serviceWorker' in navigator &&
+    'PushManager' in globalThis
+  );
+}
+
+function base64UrlToUint8Array(value) {
+  const padded = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(
+    padded.padEnd(padded.length + ((4 - (padded.length % 4)) % 4), '='),
+  );
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64UrlValue(bytes) {
+  return bytesToBase64(bytes)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function serializePushSubscription(subscription) {
+  const json = subscription.toJSON?.();
+  if (json?.endpoint && json?.keys?.p256dh && json?.keys?.auth) return json;
+  const p256dh = subscription.getKey?.('p256dh');
+  const auth = subscription.getKey?.('auth');
+  return {
+    endpoint: subscription.endpoint,
+    expirationTime: subscription.expirationTime || null,
+    keys: {
+      p256dh: p256dh
+        ? bytesToBase64UrlValue(new Uint8Array(p256dh))
+        : '',
+      auth: auth ? bytesToBase64UrlValue(new Uint8Array(auth)) : '',
+    },
+  };
+}
+
+async function loadMedicationBackgroundNotificationStatus({
+  force = false,
+} = {}) {
+  if (!medicationPushNotificationsSupported()) {
+    medicationBackgroundNotificationStatus = {
+      loaded: true,
+      available: false,
+      vapidPublicKey: '',
+      message: 'This browser does not support background Web Push.',
+    };
+    medicationBackgroundNotificationReady = false;
+    renderMedicationReminderSettings();
+    return medicationBackgroundNotificationStatus;
+  }
+
+  const now = Date.now();
+  if (
+    !force &&
+    medicationBackgroundNotificationStatus.loaded &&
+    now - medicationBackgroundNotificationStatusFetchedAt <
+      MEDICATION_BACKGROUND_NOTIFICATION_REFRESH_MS
+  ) {
+    return medicationBackgroundNotificationStatus;
+  }
+
+  if (medicationBackgroundNotificationStatusInFlight) {
+    return medicationBackgroundNotificationStatusInFlight;
+  }
+
+  medicationBackgroundNotificationStatusInFlight = fetch(
+    '/api/notifications?status=1',
+    {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    },
+  )
+    .then((res) => res.json())
+    .then((body) => {
+      medicationBackgroundNotificationStatus = {
+        loaded: true,
+        available: Boolean(body.available && body.vapidPublicKey),
+        vapidPublicKey: body.vapidPublicKey || '',
+        message: body.message || '',
+      };
+      medicationBackgroundNotificationStatusFetchedAt = Date.now();
+      if (!medicationBackgroundNotificationStatus.available) {
+        medicationBackgroundNotificationReady = false;
+      }
+      return medicationBackgroundNotificationStatus;
+    })
+    .catch(() => {
+      medicationBackgroundNotificationStatus = {
+        loaded: true,
+        available: false,
+        vapidPublicKey: '',
+        message: 'Background reminders cannot reach the notification service.',
+      };
+      medicationBackgroundNotificationReady = false;
+      return medicationBackgroundNotificationStatus;
+    })
+    .finally(() => {
+      medicationBackgroundNotificationStatusInFlight = null;
+      renderMedicationReminderSettings();
+    });
+
+  return medicationBackgroundNotificationStatusInFlight;
+}
+
 function medicationNotificationKeys() {
   try {
     const stored = JSON.parse(
@@ -6367,6 +6496,129 @@ function rememberMedicationNotifications(schedules) {
   } catch {
     /* notification display remains useful without persisted de-duplication */
   }
+}
+
+async function medicationBackgroundReminderKey(schedule) {
+  return sha256Hex(
+    `bblog-medication-reminder-v1:${session?.familyId || 'local'}:${medicationNotificationKey(schedule)}`,
+  );
+}
+
+async function medicationBackgroundReminderPayload(now = Date.now()) {
+  const notified = medicationNotificationKeys();
+  const reminders = await Promise.all(
+    medicationSchedules(now)
+    .filter((schedule) => {
+      const key = medicationNotificationKey(schedule);
+      return (
+        Number.isFinite(schedule.notificationAt) &&
+        !notified.has(key)
+      );
+    })
+    .map(async (schedule) => ({
+      key: await medicationBackgroundReminderKey(schedule),
+      remindAt: Math.max(now, schedule.notificationAt),
+    })),
+  );
+
+  return reminders
+    .sort((left, right) => left.remindAt - right.remindAt)
+    .slice(0, 100);
+}
+
+async function medicationBackgroundPushAt() {
+  const value = await kvGet(MEDICATION_BACKGROUND_PUSH_KEY).catch(() => 0);
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+async function syncMedicationBackgroundReminders(subscription) {
+  if (!session?.familyId || !data || _demoMode) return false;
+  const deviceId = await ensureDeviceId();
+  const res = await fetch('/api/notifications', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      familyId: session.familyId,
+      deviceId,
+      subscription: serializePushSubscription(subscription),
+      reminders: await medicationBackgroundReminderPayload(),
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(
+      body.message || body.error || 'Background reminders could not be saved.',
+    );
+    error.status = res.status;
+    throw error;
+  }
+  return true;
+}
+
+async function deleteMedicationBackgroundDevice() {
+  if (!session?.familyId || _demoMode) return;
+  const deviceId = await ensureDeviceId();
+  await fetch('/api/notifications', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      familyId: session.familyId,
+      deviceId,
+    }),
+  }).catch(() => {});
+}
+
+async function ensureMedicationBackgroundNotifications({ resubscribe = false } = {}) {
+  if (Notification.permission !== 'granted') return false;
+  const status = await loadMedicationBackgroundNotificationStatus();
+  if (!status.available) return false;
+
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (resubscribe && subscription) {
+    await subscription.unsubscribe().catch(() => {});
+    subscription = null;
+  }
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(status.vapidPublicKey),
+    });
+  }
+
+  await syncMedicationBackgroundReminders(subscription);
+  medicationBackgroundNotificationReady = true;
+  medicationBackgroundNotificationError = '';
+  renderMedicationReminderSettings();
+  return true;
+}
+
+function scheduleMedicationBackgroundReminderSync(delayMs =
+  MEDICATION_BACKGROUND_NOTIFICATION_SYNC_DELAY_MS) {
+  clearTimeout(medicationBackgroundReminderTimer);
+  if (
+    !data ||
+    _demoMode ||
+    !medicationPushNotificationsSupported() ||
+    Notification.permission !== 'granted'
+  )
+    return;
+
+  medicationBackgroundReminderTimer = setTimeout(() => {
+    if (medicationBackgroundNotificationSyncInFlight) return;
+    medicationBackgroundNotificationSyncInFlight =
+      ensureMedicationBackgroundNotifications()
+        .catch((error) => {
+          medicationBackgroundNotificationReady = false;
+          medicationBackgroundNotificationError =
+            error.message || 'Background reminders could not be saved.';
+        })
+        .finally(() => {
+          medicationBackgroundNotificationSyncInFlight = null;
+          renderMedicationReminderSettings();
+        });
+  }, delayMs);
 }
 
 function medicationNotificationCopy(schedules) {
@@ -6410,9 +6662,13 @@ async function checkMedicationNotifications(now = Date.now()) {
     return;
 
   const notified = medicationNotificationKeys();
+  const backgroundPushAt = await medicationBackgroundPushAt();
   const dueSchedules = medicationSchedules(now).filter(
     (schedule) =>
       (schedule.status === 'due-soon' || schedule.status === 'overdue') &&
+      (!backgroundPushAt ||
+        !Number.isFinite(schedule.notificationAt) ||
+        schedule.notificationAt > backgroundPushAt) &&
       !notified.has(medicationNotificationKey(schedule)),
   );
   if (!dueSchedules.length) return;
@@ -6421,6 +6677,7 @@ async function checkMedicationNotifications(now = Date.now()) {
   try {
     await showMedicationNotification(dueSchedules);
     rememberMedicationNotifications(dueSchedules);
+    scheduleMedicationBackgroundReminderSync();
   } catch {
     /* browsers may decline notification display after granting permission */
   } finally {
@@ -6430,6 +6687,7 @@ async function checkMedicationNotifications(now = Date.now()) {
 
 function scheduleMedicationReminderCheck(now = Date.now()) {
   clearTimeout(medicationReminderTimer);
+  scheduleMedicationBackgroundReminderSync();
   if (
     !data ||
     !medicationNotificationsAvailable() ||
@@ -6465,9 +6723,33 @@ function renderMedicationReminderSettings() {
   }
 
   if (Notification.permission === 'granted') {
+    const backgroundStatus = medicationBackgroundNotificationStatus;
+    if (medicationBackgroundNotificationReady) {
+      detail.textContent =
+        'On - alerts are scheduled for this device even when the installed app is closed.';
+      button.textContent = 'Enabled';
+      button.disabled = true;
+      return;
+    }
+    if (medicationPushNotificationsSupported() && !backgroundStatus.loaded) {
+      detail.textContent =
+        'On - checking whether background alerts are configured.';
+      button.textContent = 'Checking';
+      button.disabled = true;
+      loadMedicationBackgroundNotificationStatus().catch(() => {});
+      return;
+    }
+    if (backgroundStatus.available) {
+      detail.textContent = medicationBackgroundNotificationError
+        ? `On locally - ${medicationBackgroundNotificationError}`
+        : 'On locally - tap Enable to finish background alerts for this device.';
+      button.textContent = 'Enable';
+      button.disabled = false;
+      return;
+    }
     detail.textContent =
-      'On - one alert is sent when 25% of a repeat interval remains while bblog is running.';
-    button.textContent = 'Enabled';
+      'On locally while bblog is open. Background alerts need Web Push setup on the server.';
+    button.textContent = 'Local only';
     button.disabled = true;
     return;
   }
@@ -6481,7 +6763,7 @@ function renderMedicationReminderSettings() {
   }
 
   detail.textContent =
-    'Get one alert when assigned repeat medications are due soon, while bblog is running.';
+    'Get one alert when assigned repeat medications are due soon.';
   button.textContent = 'Enable';
   button.disabled = false;
 }
@@ -6490,6 +6772,15 @@ async function requestMedicationNotifications() {
   if (!medicationNotificationsAvailable()) return;
   if (Notification.permission === 'default') {
     await Notification.requestPermission();
+  }
+  if (Notification.permission === 'granted') {
+    try {
+      await ensureMedicationBackgroundNotifications({ resubscribe: true });
+    } catch (error) {
+      medicationBackgroundNotificationReady = false;
+      medicationBackgroundNotificationError =
+        error.message || 'Background reminders could not be enabled.';
+    }
   }
   renderMedicationReminderSettings();
   scheduleMedicationReminderCheck();
@@ -7089,6 +7380,7 @@ function wireApp() {
     if (forgetBtn.dataset.confirming) {
       delete forgetBtn.dataset.confirming;
       forgetBtn.textContent = 'Forget';
+      await deleteMedicationBackgroundDevice();
       session = {};
       await kvDelete(SESSION_KEY);
       showSetup();

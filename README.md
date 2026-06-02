@@ -30,6 +30,14 @@ npm run bump:caches
 
 This increments `CACHE_NAME` in `public/sw.js` and refreshes cache-bust query tokens in `public/sw.js` and `public/index.html`.
 
+To create Web Push keys for closed-PWA medication reminders:
+
+```bash
+npm run notifications:keys
+```
+
+Add the generated `BBLOG_VAPID_PUBLIC_KEY`, `BBLOG_VAPID_PRIVATE_KEY`, and `BBLOG_VAPID_SUBJECT` values to the deployed environment.
+
 ## Deploy on Vercel
 
 Use the deploy button above, or set it up manually:
@@ -38,7 +46,8 @@ Use the deploy button above, or set it up manually:
 2. Push this folder to GitHub, either as the repo root or as a subdirectory project.
 3. Import the project in Vercel.
 4. Add `BBLOG_FAMILY_ACCESS_KEY` as a Vercel environment variable.
-5. Deploy.
+5. For medication reminders while an installed PWA is closed, add the generated `BBLOG_VAPID_PUBLIC_KEY`, `BBLOG_VAPID_PRIVATE_KEY`, and `BBLOG_VAPID_SUBJECT` environment variables and connect Vercel Blob storage.
+6. Deploy.
 
 The app targets Node.js 24 or newer through `package.json`. A fresh Vercel import will not accept joins until `BBLOG_FAMILY_ACCESS_KEY` is set.
 
@@ -84,6 +93,6 @@ If "Remember on this device" is enabled, the access key is stored in the browser
 
 Assign medications to babies in Settings and set a repeat interval to show due-soon and overdue alerts on the dashboard. With notifications enabled, bblog sends one due-soon notification when 25% of an interval remains, combining medications that become due together.
 
-Medication schedules stay encrypted on the device, so reminder checks run while bblog is running rather than through a server-side push schedule.
+While bblog is open, reminders run locally. When deployed with Vercel Blob, VAPID keys, and the included `/api/notifications` cron, installed PWAs can also receive a generic Web Push notification while closed, including on iOS. The server stores push subscriptions, wake-up times, and hashed reminder ids only; baby names, medication names, doses, and due times remain in the encrypted device vault.
 
 [deploy-vercel]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog&project-name=bblog&repository-name=bblog&env=BBLOG_FAMILY_ACCESS_KEY&envDescription=Required%3A+choose+a+long+family+access+key+for+this+one-vault+bblog+instance.+Add+Vercel+Blob+after+deploy+only+if+you+want+family+sharing+across+devices.&envLink=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog%23deploy-on-vercel
