@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v112';
+const APP_VERSION = 'bblog-v117';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -1636,6 +1636,8 @@ let medicationNotificationInFlight = false;
 let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
+let _syncNotificationActive = false;
+let _installSuggestionVisible = false;
 let _milkStatsRange = '24h';
 let _milkStatsCustomStart = '';
 let _milkStatsCustomEnd = '';
@@ -2093,20 +2095,11 @@ function installSuggestionDetail() {
 }
 
 function updateInstallSuggestion() {
-  const banner = document.getElementById('install-banner');
-  const detail = document.getElementById('install-banner-detail');
-  const actionBtn = document.getElementById('install-action-btn');
-  if (!banner || !detail || !actionBtn) return;
-
-  const shouldShow =
+  _installSuggestionVisible =
     !isStandaloneDisplay() &&
     !_installSuggestionDismissed &&
     !installDismissedRecently();
-  banner.classList.toggle('hidden', !shouldShow);
-  if (!shouldShow) return;
-
-  detail.textContent = installSuggestionDetail();
-  actionBtn.classList.toggle('hidden', !deferredInstallPrompt);
+  updateAppNotification();
 }
 
 function dismissInstallSuggestion() {
@@ -2926,21 +2919,104 @@ async function mutateData(mutator) {
   scheduleSync();
 }
 
-function updateConnectionBanner() {
-  const banner = document.getElementById('offline-banner');
-  if (!banner) return;
+function appShellIsVisible() {
+  return !document.getElementById('app-shell')?.classList.contains('hidden');
+}
 
-  banner.classList.toggle('offline-banner--sync-disabled', _cloudSyncDisabled);
-  if (_cloudSyncDisabled) {
-    banner.textContent =
-      'Cloud sync is not configured. Same-key users will not share data until Vercel Blob is connected.';
-    banner.classList.remove('hidden');
-    return;
+function hasCloudSyncSession() {
+  return (
+    appShellIsVisible() &&
+    !_demoMode &&
+    !!session?.accessKey &&
+    !!session?.familyId
+  );
+}
+
+function currentAppNotification() {
+  if (hasCloudSyncSession() && _cloudSyncDisabled) {
+    return {
+      variant: 'danger',
+      title: 'Cloud sync not configured',
+      detail:
+        'Same-key users will not share data until Vercel Blob is connected.',
+    };
   }
 
-  banner.textContent =
-    'Saved here. Cloud sync will resume when this device is back online.';
-  banner.classList.toggle('hidden', !_isOffline);
+  if (hasCloudSyncSession() && _isOffline) {
+    return {
+      variant: 'offline',
+      title: 'Cloud sync will resume',
+      detail: 'Saved here while this device is offline.',
+    };
+  }
+
+  if (
+    hasCloudSyncSession() &&
+    _syncNotificationActive &&
+    !_cloudSyncDisabled
+  ) {
+    return {
+      variant: 'sync',
+      title: 'Syncing...',
+      detail: 'Checking encrypted cloud sync.',
+    };
+  }
+
+  if (_installSuggestionVisible) {
+    return {
+      variant: 'install',
+      title: 'Add bblog to your home screen',
+      detail: installSuggestionDetail(),
+      dismiss: true,
+      action: deferredInstallPrompt ? 'install' : '',
+      actionText: deferredInstallPrompt ? 'Add' : '',
+    };
+  }
+
+  return null;
+}
+
+function updateAppNotification() {
+  const notification = document.getElementById('app-notification');
+  if (!notification) return;
+
+  const next = currentAppNotification();
+  notification.className = next
+    ? `app-notification app-notification--${next.variant}`
+    : 'app-notification hidden';
+  if (!next) return;
+
+  const titleEl = document.getElementById('app-notification-title');
+  const detailEl = document.getElementById('app-notification-detail');
+  const dismissBtn = document.getElementById('app-notification-dismiss-btn');
+  const actionBtn = document.getElementById('app-notification-action-btn');
+
+  if (titleEl) titleEl.textContent = next.title;
+  if (detailEl) detailEl.textContent = next.detail;
+
+  if (dismissBtn) {
+    dismissBtn.className = next.dismiss
+      ? 'app-notification-btn app-notification-btn-secondary'
+      : 'app-notification-btn app-notification-btn-secondary hidden';
+    dismissBtn.setAttribute(
+      'aria-label',
+      next.dismiss ? `Dismiss ${next.title}` : 'Dismiss notification',
+    );
+  }
+
+  if (actionBtn) {
+    const hasAction = Boolean(next.action && next.actionText);
+    actionBtn.className = hasAction
+      ? 'app-notification-btn app-notification-btn-primary'
+      : 'app-notification-btn app-notification-btn-primary hidden';
+    actionBtn.textContent = next.actionText || '';
+    actionBtn.dataset.action = next.action || '';
+    actionBtn.disabled = Boolean(next.actionDisabled);
+  }
+}
+
+function updateConnectionBanner() {
+  updateAppNotification();
 }
 
 function setOffline(offline) {
@@ -2966,11 +3042,24 @@ function setSyncStatus(title, detail) {
   if (detailEl) detailEl.textContent = detail;
 }
 
+function startSyncNotification() {
+  if (_demoMode || !session?.accessKey || !session?.familyId) return;
+  _syncNotificationActive = true;
+  updateAppNotification();
+}
+
+function clearSyncNotification() {
+  _syncNotificationActive = false;
+  setSyncStatus('Encrypted sync', syncDetailText());
+  updateAppNotification();
+}
+
 function syncDetailText() {
   if (_demoMode) return 'Demo data - not saved or synced';
   if (!session?.familyId) return 'No access key on this device';
   if (_cloudSyncDisabled) return 'Local only - Vercel Blob not connected';
   if (_isOffline) return 'Waiting for connection';
+  if (_syncNotificationActive) return 'Syncing...';
   if (session.lastSyncedAt)
     return `Last synced ${formatElapsed(Date.now() - new Date(session.lastSyncedAt).getTime())}`;
   return 'Ready to sync';
@@ -2978,6 +3067,7 @@ function syncDetailText() {
 
 function updateSyncUi() {
   setSyncStatus('Encrypted sync', syncDetailText());
+  updateAppNotification();
 }
 
 async function fetchRemoteVault() {
@@ -3062,8 +3152,10 @@ async function syncNow({ quiet = false, force = false } = {}) {
     return;
   }
   if (syncInFlight) return syncInFlight;
+  startSyncNotification();
 
   syncInFlight = (async () => {
+    updateAppNotification();
     if (!quiet) setSyncStatus('Encrypted sync', 'Syncing...');
     if (force) setCloudSyncDisabled(false);
     const localBefore = normalizeData(data || (await loadData()));
@@ -3148,6 +3240,7 @@ async function syncNow({ quiet = false, force = false } = {}) {
     })
     .finally(() => {
       syncInFlight = null;
+      clearSyncNotification();
     });
 
   return syncInFlight;
@@ -3191,7 +3284,7 @@ async function joinWithAccessKey(rawKey) {
     if (hasLocalVault) {
       await persistSession();
       await loadData();
-      showApp();
+      showApp({ syncOnOpen: !remote.syncDisabled });
       setOffline(false);
       setSetupStatus('');
       if (remote.syncDisabled) {
@@ -3226,7 +3319,7 @@ async function joinWithAccessKey(rawKey) {
 
     await saveData(buildEmptyData());
 
-    showApp();
+    showApp({ syncOnOpen: true });
     setOffline(false);
     setSetupStatus('');
     syncNow({ quiet: true }).catch(() => {});
@@ -3259,6 +3352,7 @@ function showSetup() {
   document.getElementById('setup-screen').classList.remove('hidden');
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
+  _syncNotificationActive = false;
   updateInstallSuggestion();
 }
 
@@ -3269,11 +3363,13 @@ function hasRequiredSetup() {
   );
 }
 
-function showApp() {
+function showApp({ syncOnOpen = false } = {}) {
   document.getElementById('setup-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   document.getElementById('tab-bar').classList.remove('hidden');
   setOffline(!navigator.onLine);
+  if (syncOnOpen && navigator.onLine) startSyncNotification();
+  else updateAppNotification();
   updateInstallSuggestion();
   renderAll();
   if (!hasRequiredSetup()) setActiveTab('settings');
@@ -6751,11 +6847,19 @@ function wireSetup() {
 
 function wireInstallSuggestion() {
   document
-    .getElementById('install-dismiss-btn')
+    .getElementById('app-notification-dismiss-btn')
     .addEventListener('click', dismissInstallSuggestion);
   document
-    .getElementById('install-action-btn')
+    .getElementById('app-notification-action-btn')
     .addEventListener('click', async () => {
+      const action = document.getElementById(
+        'app-notification-action-btn',
+      ).dataset.action;
+      if (action === 'sync') {
+        syncNow({ quiet: false, force: true }).catch(() => {});
+        return;
+      }
+      if (action !== 'install') return;
       if (!deferredInstallPrompt) return;
 
       const promptEvent = deferredInstallPrompt;
@@ -7064,7 +7168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadData();
     document.getElementById('remember-key-input').checked =
       session.rememberKey !== false;
-    showApp();
+    showApp({ syncOnOpen: true });
     syncNow({ quiet: true }).catch(() => {});
   } else {
     showSetup();

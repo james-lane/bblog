@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260527-115450" />
-  <link rel="icon" href="/icon.svg?v=20260527-115450" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260602-215059" />
+  <link rel="icon" href="/icon.svg?v=20260602-215059" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,23 +46,19 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260527-115450" />
+  <link rel="stylesheet" href="/styles.css?v=20260602-215059" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
 
-  <div id="offline-banner" class="offline-banner hidden">
-    Saved here. Cloud sync will resume when this device is back online.
-  </div>
-
-  <div id="install-banner" class="install-banner hidden" aria-live="polite">
-    <div class="install-banner-copy">
-      <strong>Add bblog to your Home Screen</strong>
-      <span id="install-banner-detail">Open it in a standalone app view.</span>
+  <div id="app-notification" class="app-notification hidden" role="status" aria-live="polite">
+    <div class="app-notification-copy">
+      <strong id="app-notification-title"></strong>
+      <span id="app-notification-detail"></span>
     </div>
-    <div class="install-banner-actions">
-      <button id="install-dismiss-btn" class="install-banner-btn install-banner-btn-secondary" type="button" aria-label="Dismiss add to home screen suggestion">×</button>
-      <button id="install-action-btn" class="install-banner-btn install-banner-btn-primary" type="button">Add</button>
+    <div class="app-notification-actions">
+      <button id="app-notification-dismiss-btn" class="app-notification-btn app-notification-btn-secondary hidden" type="button" aria-label="Dismiss notification">×</button>
+      <button id="app-notification-action-btn" class="app-notification-btn app-notification-btn-primary hidden" type="button"></button>
     </div>
   </div>
 
@@ -232,7 +228,7 @@
         <div class="sync-card">
           <div>
             <div id="sync-title" class="sync-title">Encrypted sync</div>
-            <div id="sync-detail" class="sync-detail">Not synced yet</div>
+            <div id="sync-detail" class="sync-detail">Ready to sync</div>
           </div>
           <button id="sync-now-btn" class="med-card-edit-btn" title="Sync now">↻</button>
         </div>
@@ -365,6 +361,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260527-115450"></script>
+  <script src="/app.js?v=20260602-215059"></script>
 </body>
 </html>

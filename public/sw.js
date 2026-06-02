@@ -1,12 +1,12 @@
-const CACHE_NAME = 'bblog-v112';
+const CACHE_NAME = 'bblog-v117';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260527-115450',
+  '/styles.css?v=20260602-215059',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260527-115450',
-  '/manifest.webmanifest?v=20260527-115450',
-  '/icon.svg?v=20260527-115450',
+  '/app.js?v=20260602-215059',
+  '/manifest.webmanifest?v=20260602-215059',
+  '/icon.svg?v=20260602-215059',
 ];
 
 self.addEventListener('install', (event) => {
