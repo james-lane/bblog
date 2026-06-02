@@ -297,6 +297,11 @@ body {
 }
 
 .app-notification {
+  --notification-bg: var(--surface);
+  --notification-glass-bg: color-mix(in srgb, var(--notification-bg) 82%, transparent);
+  --notification-border: color-mix(in srgb, var(--accent) 28%, transparent);
+  --notification-title: var(--accent);
+  --notification-detail: var(--text-muted);
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 10px);
   left: calc(env(safe-area-inset-left, 0px) + 12px);
@@ -306,11 +311,11 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  background: var(--notification-bg);
+  background: var(--notification-glass-bg);
   color: var(--text);
   padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border: 1px solid var(--notification-border);
   border-radius: 14px;
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(18px) saturate(1.35);
@@ -320,24 +325,23 @@ body {
 
 .app-notification--sync,
 .app-notification--offline {
-  background: var(--offline-bg);
-  background: color-mix(in srgb, var(--offline-bg) 78%, transparent);
-  color: var(--offline-text);
-  border-color: color-mix(in srgb, var(--offline-text) 18%, transparent);
+  --notification-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  --notification-border: color-mix(in srgb, var(--accent) 36%, transparent);
+  --notification-title: var(--accent);
+  --notification-detail: var(--text);
 }
 
 .app-notification--danger {
-  background: var(--sync-disabled-bg);
-  background: color-mix(in srgb, var(--sync-disabled-bg) 80%, transparent);
-  color: var(--offline-text);
-  border-color: color-mix(in srgb, var(--offline-text) 18%, transparent);
+  --notification-bg: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  --notification-border: color-mix(in srgb, var(--danger) 34%, transparent);
+  --notification-title: var(--danger);
+  --notification-detail: var(--text);
 }
 
 .app-notification--install {
-  background: var(--surface);
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  --notification-border: color-mix(in srgb, var(--accent) 24%, transparent);
+  --notification-title: var(--accent);
+  --notification-detail: var(--text-muted);
 }
 
 .app-notification-copy {
@@ -350,24 +354,19 @@ body {
 }
 
 .app-notification-copy strong {
-  color: currentColor;
+  color: var(--notification-title);
   font-size: 0.86rem;
   font-weight: 900;
 }
 
 .app-notification-copy span {
-  color: currentColor;
+  color: var(--notification-detail);
   font-size: 0.78rem;
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
-.app-notification--install .app-notification-copy strong {
-  color: var(--text);
-}
-
 .app-notification--install .app-notification-copy span {
-  color: var(--text-muted);
   font-weight: 500;
 }
 
