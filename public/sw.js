@@ -1,15 +1,15 @@
-const CACHE_NAME = 'bblog-v119';
+const CACHE_NAME = 'bblog-v122';
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const MEDICATION_BACKGROUND_PUSH_KEY = 'bblog-background-medication-push-at';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/styles.css?v=20260602-223708',
+  '/styles.css?v=20260605-135046',
   '/vendor/chart.umd.min.js?v=4.5.1',
-  '/app.js?v=20260602-223708',
-  '/manifest.webmanifest?v=20260602-223708',
-  '/icon.svg?v=20260602-223708',
+  '/app.js?v=20260605-135046',
+  '/manifest.webmanifest?v=20260605-135046',
+  '/icon.svg?v=20260605-135046',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v119';
+const APP_VERSION = 'bblog-v122';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -88,7 +88,8 @@ const MILK_STATS_RANGE_OPTIONS = [
 ];
 const CHART_PAGES = [
   { id: 'weight', name: 'Weight trend' },
-  { id: 'milk', name: 'Milk intake' },
+  { id: 'milk', name: 'Bottle intake' },
+  { id: 'breast', name: 'Breast feeds' },
   { id: 'express', name: 'Expressing' },
 ];
 const MILK_CHART_GROUP_OPTIONS = [
@@ -1623,6 +1624,9 @@ const formState = {
   user: null,
   baby: null,
   type: null,
+  milkMethod: null,
+  durationMinutes: '',
+  milkAdditiveIds: [],
   medication: null,
   medicationDoses: {},
   amount: '',
@@ -1659,12 +1663,17 @@ let _milkStatsCustomEnd = '';
 let _expressStatsRange = '24h';
 let _expressStatsCustomStart = '';
 let _expressStatsCustomEnd = '';
+let _breastStatsRange = '24h';
+let _breastStatsCustomStart = '';
+let _breastStatsCustomEnd = '';
 let _activeChartPage = 'weight';
 let _milkChartGroup = '24h';
 let _expressChartGroup = '24h';
 const _hiddenMilkChartBabyIds = new Set();
+const _hiddenBreastChartBabyIds = new Set();
 const _hiddenExpressChartUserIds = new Set();
 let _medEditId = null;
+let _milkAdditiveEditId = null;
 let _personEdit = null;
 let _selectedWeightAgeMonths = null;
 let _weightGrowthSex = selectedWeightGrowthSex();
@@ -1675,6 +1684,7 @@ let _weightGrowthView = {
 };
 let weightTrendChart = null;
 let milkIntakeChart = null;
+let breastFeedChart = null;
 let expressingChart = null;
 let keyCache = null;
 let deferredInstallPrompt = null;
@@ -2337,6 +2347,7 @@ function buildEmptyData() {
     meta: { createdAt: stamp, updatedAt: stamp },
     users: [],
     babies: [],
+    milkAdditives: [],
     medications: [],
     entries: [],
   });
@@ -2376,6 +2387,7 @@ function buildDemoData() {
         updatedAt: stamp,
       },
     ],
+    milkAdditives: [],
     medications: [],
     entries: [
       {
@@ -2588,6 +2600,13 @@ function normalizeData(value) {
       deletedAt: item.deletedAt || null,
     })),
     babies: normalizedBabies,
+    milkAdditives: normalizeRecordList(source.milkAdditives, (item) => ({
+      id: item.id,
+      label: String(item.label || item.name || '').trim() || 'Milk additive',
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      deletedAt: item.deletedAt || null,
+    })),
     medications: normalizeRecordList(source.medications, (item) => ({
       id: item.id,
       label: String(item.label || item.name || '').trim() || 'Medication',
@@ -2615,6 +2634,19 @@ function normalizeData(value) {
         ? { amount: Number(item.amount) }
         : {}),
       ...(item.unit ? { unit: item.unit } : {}),
+      ...((item.type || 'milk') === 'milk'
+        ? { milkMethod: item.milkMethod === 'breast' ? 'breast' : 'bottle' }
+        : {}),
+      ...(item.durationMinutes != null && item.durationMinutes !== ''
+        ? { durationMinutes: Number(item.durationMinutes) }
+        : {}),
+      ...(Array.isArray(item.milkAdditiveIds) && item.milkAdditiveIds.length
+        ? {
+            milkAdditiveIds: [
+              ...new Set(item.milkAdditiveIds.map(String).filter(Boolean)),
+            ],
+          }
+        : {}),
       medication: item.medication || null,
       createdAt: item.createdAt || item.timestamp || stamp,
       updatedAt: item.updatedAt,
@@ -2624,6 +2656,7 @@ function normalizeData(value) {
 
   result.users.sort(sortByCreatedThenName);
   result.babies.sort(sortByCreatedThenName);
+  result.milkAdditives.sort(sortByCreatedThenName);
   result.medications.sort(sortByCreatedThenName);
   result.entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   return result;
@@ -2660,6 +2693,10 @@ function medications() {
   return active(data?.medications || []);
 }
 
+function milkAdditives() {
+  return active(data?.milkAdditives || []);
+}
+
 function entries({ includeDeleted = false } = {}) {
   const list = data?.entries || [];
   return includeDeleted ? list : active(list);
@@ -2690,6 +2727,36 @@ function findBaby(id) {
 
 function findMed(id) {
   return medications().find((m) => m.id === id);
+}
+
+function findMilkAdditive(id, { includeDeleted = false } = {}) {
+  const list = includeDeleted ? data?.milkAdditives || [] : milkAdditives();
+  return list.find((additive) => additive.id === id);
+}
+
+function selectedMilkAdditiveIds() {
+  const availableIds = new Set(milkAdditives().map((additive) => additive.id));
+  return (formState.milkAdditiveIds || []).filter((id) =>
+    availableIds.has(id),
+  );
+}
+
+function milkAdditiveNames(ids, { includeDeleted = false } = {}) {
+  return (Array.isArray(ids) ? ids : []).map(
+    (id) => findMilkAdditive(id, { includeDeleted })?.label || id,
+  );
+}
+
+function resetMilkAdditiveSelection() {
+  formState.milkAdditiveIds = [];
+}
+
+function resetMilkFlow() {
+  formState.milkMethod = null;
+  formState.durationMinutes = '';
+  resetMilkAdditiveSelection();
+  const durationInput = document.getElementById('breast-duration-input');
+  if (durationInput) durationInput.value = '';
 }
 
 function medicationAssignedToBaby(med, babyId) {
@@ -2870,6 +2937,10 @@ function mergeVaults(localData, remoteData) {
     },
     users: mergeRecordList(localData?.users, remoteData?.users),
     babies: mergeBabyList(localData?.babies, remoteData?.babies),
+    milkAdditives: mergeRecordList(
+      localData?.milkAdditives,
+      remoteData?.milkAdditives,
+    ),
     medications: mergeRecordList(
       localData?.medications,
       remoteData?.medications,
@@ -3402,6 +3473,9 @@ function activateDemoMode() {
   _expressStatsRange = '24h';
   _expressStatsCustomStart = '';
   _expressStatsCustomEnd = '';
+  _breastStatsRange = '24h';
+  _breastStatsCustomStart = '';
+  _breastStatsCustomEnd = '';
   session = { demo: true, rememberKey: false };
   data = buildDemoData();
   showApp();
@@ -3504,8 +3578,22 @@ function formatMilkRangeDate(timestamp) {
 }
 
 function milkAmount(entry) {
+  if (entry.type === 'milk' && entry.milkMethod === 'breast') return 0;
   const amount = parseFloat(entry.amount);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function milkDurationMinutes(entry) {
+  const minutes = parseFloat(entry.durationMinutes);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+}
+
+function formatMilkFeedValue(entry) {
+  if (entry?.type === 'milk' && entry.milkMethod === 'breast') {
+    const minutes = milkDurationMinutes(entry);
+    return minutes > 0 ? `${minutes.toLocaleString()} min breast` : 'Breast';
+  }
+  return formatMilkAmount(milkAmount(entry));
 }
 
 function weightGrams(entry) {
@@ -3779,31 +3867,31 @@ function milkLiveStats(now = Date.now()) {
     if (!stats[e.baby]) {
       stats[e.baby] = {
         lastAt: null,
-        lastAmount: null,
+        lastValue: '',
         previousAt: null,
-        previousAmount: null,
+        previousValue: '',
         rollingAmount: 0,
         rollingFeeds: 0,
       };
     }
 
-    const amount = milkAmount(e);
-    if (amount <= 0) continue;
+    const value = formatMilkFeedValue(e);
 
     if (stats[e.baby].lastAt == null || t > stats[e.baby].lastAt) {
       stats[e.baby].previousAt = stats[e.baby].lastAt;
-      stats[e.baby].previousAmount = stats[e.baby].lastAmount;
+      stats[e.baby].previousValue = stats[e.baby].lastValue;
       stats[e.baby].lastAt = t;
-      stats[e.baby].lastAmount = amount;
+      stats[e.baby].lastValue = value;
     } else if (
       stats[e.baby].previousAt == null ||
       t > stats[e.baby].previousAt
     ) {
       stats[e.baby].previousAt = t;
-      stats[e.baby].previousAmount = amount;
+      stats[e.baby].previousValue = value;
     }
 
-    if (t >= windowStart) {
+    const amount = milkAmount(e);
+    if (amount > 0 && t >= windowStart) {
       stats[e.baby].rollingAmount += amount;
       stats[e.baby].rollingFeeds += 1;
     }
@@ -3955,6 +4043,78 @@ function selectedExpressStatsRangeBounds(now = Date.now()) {
   };
 }
 
+function breastStatsRangeById(id) {
+  return (
+    MILK_STATS_RANGE_OPTIONS.find((option) => option.id === id) ||
+    MILK_STATS_RANGE_OPTIONS[0]
+  );
+}
+
+function ensureBreastStatsCustomRange(now = Date.now()) {
+  const today = dateInputValue(now);
+  if (!_breastStatsCustomStart) _breastStatsCustomStart = today;
+  if (!_breastStatsCustomEnd) _breastStatsCustomEnd = today;
+}
+
+function selectBreastStatsRange(id) {
+  const option = breastStatsRangeById(id);
+  _breastStatsRange = option.id;
+  if (_breastStatsRange === 'custom') ensureBreastStatsCustomRange();
+}
+
+function setBreastStatsCustomRange(field, value) {
+  ensureBreastStatsCustomRange();
+  if (field === 'start')
+    _breastStatsCustomStart = normalizeDateOnly(value) || '';
+  if (field === 'end') _breastStatsCustomEnd = normalizeDateOnly(value) || '';
+  _breastStatsRange = 'custom';
+}
+
+function selectedBreastStatsRangeBounds(now = Date.now()) {
+  const option = breastStatsRangeById(_breastStatsRange);
+  if (option.id !== 'custom') {
+    return {
+      id: option.id,
+      start: now - option.durationMs,
+      end: now,
+      summary: option.summary,
+      days: option.durationMs / 86400000,
+    };
+  }
+
+  ensureBreastStatsCustomRange(now);
+  let start = dateInputStartMs(_breastStatsCustomStart);
+  let end = dateInputEndMs(_breastStatsCustomEnd);
+
+  if (start == null || end == null) {
+    const today = dateInputValue(now);
+    _breastStatsCustomStart = today;
+    _breastStatsCustomEnd = today;
+    start = dateInputStartMs(today);
+    end = dateInputEndMs(today);
+  }
+
+  if (end <= start) {
+    const rangeStart = dateInputStartMs(_breastStatsCustomEnd);
+    const rangeEnd = dateInputEndMs(_breastStatsCustomStart);
+    if (rangeStart != null && rangeEnd != null && rangeEnd > rangeStart) {
+      start = rangeStart;
+      end = rangeEnd;
+    }
+  }
+
+  const startLabel = formatMilkRangeDate(start);
+  const endLabel = formatMilkRangeDate(end - 1);
+  return {
+    id: option.id,
+    start,
+    end,
+    summary:
+      startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
+    days: Math.max((end - start) / 86400000, 1),
+  };
+}
+
 function milkIntakeStats(start, end, activeBabies) {
   const stats = {};
   activeBabies.forEach((baby) => {
@@ -3995,11 +4155,14 @@ function milkIntakeStats(start, end, activeBabies) {
 }
 
 function expressingStats(start, end, activeParents) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const stats = {};
   activeParents.forEach((parent) => {
     stats[parent.id] = {
       total: 0,
       sessions: 0,
+      todaySessions: 0,
     };
   });
 
@@ -4018,10 +4181,49 @@ function expressingStats(start, end, activeParents) {
 
     stat.total += amount;
     stat.sessions += 1;
+    if (timestamp >= todayStart.getTime()) stat.todaySessions += 1;
   }
 
   Object.values(stats).forEach((stat) => {
     stat.avgSession = stat.sessions ? stat.total / stat.sessions : null;
+  });
+
+  return stats;
+}
+
+function breastFeedStats(start, end, activeBabies) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const stats = {};
+  activeBabies.forEach((baby) => {
+    stats[baby.id] = {
+      totalMinutes: 0,
+      feeds: 0,
+      todayFeeds: 0,
+    };
+  });
+
+  for (const entry of entries()) {
+    const stat = stats[entry.baby];
+    if (entry.type !== 'milk' || entry.milkMethod !== 'breast' || !stat)
+      continue;
+    const timestamp = new Date(entry.timestamp).getTime();
+    if (
+      !Number.isFinite(timestamp) ||
+      timestamp < start ||
+      timestamp >= end
+    )
+      continue;
+    const minutes = milkDurationMinutes(entry);
+    if (minutes <= 0) continue;
+
+    stat.totalMinutes += minutes;
+    stat.feeds += 1;
+    if (timestamp >= todayStart.getTime()) stat.todayFeeds += 1;
+  }
+
+  Object.values(stats).forEach((stat) => {
+    stat.avgMinutes = stat.feeds ? stat.totalMinutes / stat.feeds : null;
   });
 
   return stats;
@@ -4049,6 +4251,31 @@ function toggleMilkChartBaby(babyId, activeBabies) {
 
   if (visibleMilkChartBabies(activeBabies).length <= 1) return false;
   _hiddenMilkChartBabyIds.add(babyId);
+  return true;
+}
+
+function visibleBreastChartBabies(activeBabies) {
+  const visibleBabies = activeBabies.filter(
+    (baby) => !_hiddenBreastChartBabyIds.has(baby.id),
+  );
+  if (!visibleBabies.length && activeBabies.length) {
+    _hiddenBreastChartBabyIds.delete(activeBabies[0].id);
+    return [activeBabies[0]];
+  }
+  return visibleBabies;
+}
+
+function toggleBreastChartBaby(babyId, activeBabies) {
+  const baby = activeBabies.find((item) => item.id === babyId);
+  if (!baby) return false;
+
+  if (_hiddenBreastChartBabyIds.has(babyId)) {
+    _hiddenBreastChartBabyIds.delete(babyId);
+    return true;
+  }
+
+  if (visibleBreastChartBabies(activeBabies).length <= 1) return false;
+  _hiddenBreastChartBabyIds.add(babyId);
   return true;
 }
 
@@ -4173,15 +4400,24 @@ function milkIntakeBuckets(start, end, activeBabies, group = '24h') {
   return { buckets, totals, total };
 }
 
-function expressingBuckets(start, end, activeParents, group = '24h') {
+function dailyActivityBuckets(
+  start,
+  end,
+  subjects,
+  { matches, subjectId, value },
+) {
   const buckets = [];
   const bucketIndexes = new Map();
-  const intervalHours = milkChartGroupById(group).hours;
-  const totals = Object.fromEntries(
-    activeParents.map((parent) => [parent.id, []]),
+  const quantities = Object.fromEntries(
+    subjects.map((subject) => [subject.id, []]),
   );
-  const firstBucket = new Date(milkChartBucketStart(start, group));
-  const finalBucket = milkChartBucketStart(Math.max(start, end - 1), group);
+  const counts = Object.fromEntries(
+    subjects.map((subject) => [subject.id, []]),
+  );
+  const firstBucket = new Date(start);
+  firstBucket.setHours(0, 0, 0, 0);
+  const finalBucket = new Date(Math.max(start, end - 1));
+  finalBucket.setHours(0, 0, 0, 0);
 
   for (
     let cursor = firstBucket;
@@ -4189,31 +4425,56 @@ function expressingBuckets(start, end, activeParents, group = '24h') {
     cursor = new Date(
       cursor.getFullYear(),
       cursor.getMonth(),
-      cursor.getDate(),
-      cursor.getHours() + intervalHours,
+      cursor.getDate() + 1,
     )
   ) {
     const timestamp = cursor.getTime();
     bucketIndexes.set(timestamp, buckets.length);
     buckets.push({ timestamp });
-    activeParents.forEach((parent) => totals[parent.id].push(0));
+    subjects.forEach((subject) => {
+      quantities[subject.id].push(0);
+      counts[subject.id].push(0);
+    });
   }
 
-  let total = 0;
+  let totalQuantity = 0;
+  let totalCount = 0;
   for (const entry of entries()) {
-    if (entry.type !== 'express' || !totals[entry.user]) continue;
+    const id = subjectId(entry);
+    if (!matches(entry) || !quantities[id]) continue;
     const timestamp = new Date(entry.timestamp).getTime();
     if (!Number.isFinite(timestamp) || timestamp < start || timestamp >= end)
       continue;
-    const amount = milkAmount(entry);
-    if (amount <= 0) continue;
-    const bucketIndex = bucketIndexes.get(milkChartBucketStart(timestamp, group));
+    const quantity = value(entry);
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+    const bucketStart = new Date(timestamp);
+    bucketStart.setHours(0, 0, 0, 0);
+    const bucketIndex = bucketIndexes.get(bucketStart.getTime());
     if (bucketIndex == null) continue;
-    totals[entry.user][bucketIndex] += amount;
-    total += amount;
+    quantities[id][bucketIndex] += quantity;
+    counts[id][bucketIndex] += 1;
+    totalQuantity += quantity;
+    totalCount += 1;
   }
 
-  return { buckets, totals, total };
+  return { buckets, quantities, counts, totalQuantity, totalCount };
+}
+
+function expressingBuckets(start, end, activeParents) {
+  return dailyActivityBuckets(start, end, activeParents, {
+    matches: (entry) => entry.type === 'express',
+    subjectId: (entry) => entry.user,
+    value: milkAmount,
+  });
+}
+
+function breastFeedBuckets(start, end, activeBabies) {
+  return dailyActivityBuckets(start, end, activeBabies, {
+    matches: (entry) =>
+      entry.type === 'milk' && entry.milkMethod === 'breast',
+    subjectId: (entry) => entry.baby,
+    value: milkDurationMinutes,
+  });
 }
 
 function weightTrendModel(activeBabies) {
@@ -4624,6 +4885,13 @@ function destroyMilkIntakeChart() {
   }
 }
 
+function destroyBreastFeedChart() {
+  if (breastFeedChart) {
+    breastFeedChart.destroy();
+    breastFeedChart = null;
+  }
+}
+
 function destroyExpressingChart() {
   if (expressingChart) {
     expressingChart.destroy();
@@ -4780,11 +5048,11 @@ function renderMilkIntakeTrend(activeBabies) {
     : '';
   const emptyNote = model.total
     ? ''
-    : '<p class="charts-milk-empty">No milk feeds logged for selected babies in this range.</p>';
+    : '<p class="charts-milk-empty">No bottle feeds logged for selected babies in this range.</p>';
 
   return `
     <div class="charts-milk-plot">
-      <div class="dash-range-options charts-milk-ranges" role="radiogroup" aria-label="Milk intake chart range">
+      <div class="dash-range-options charts-milk-ranges" role="radiogroup" aria-label="Bottle intake chart range">
         ${MILK_STATS_RANGE_OPTIONS.map(
           (option) => `
           <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === range.id}" data-milk-chart-range="${escapeHtml(option.id)}">
@@ -4802,7 +5070,7 @@ function renderMilkIntakeTrend(activeBabies) {
       </div>
       <div class="charts-milk-group-row">
         <span class="charts-milk-group-label">Bars</span>
-        <div class="dash-range-options charts-milk-group" role="radiogroup" aria-label="Milk intake bar grouping">
+        <div class="dash-range-options charts-milk-group" role="radiogroup" aria-label="Bottle intake bar grouping">
           ${MILK_CHART_GROUP_OPTIONS.map(
             (option) => `
             <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === group.id}" data-milk-chart-group="${escapeHtml(option.id)}">
@@ -4811,7 +5079,7 @@ function renderMilkIntakeTrend(activeBabies) {
           ).join('')}
         </div>
       </div>
-      <div class="charts-milk-metrics" aria-label="Milk intake summaries">
+      <div class="charts-milk-metrics" aria-label="Bottle intake summaries">
         ${activeBabies
           .map((baby) => {
             const stat = intakeStats[baby.id] || {};
@@ -4832,9 +5100,9 @@ function renderMilkIntakeTrend(activeBabies) {
           })
           .join('')}
       </div>
-      <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${escapeHtml(group.ariaName)} milk intake chart"${milkChartStyle}>
+      <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${escapeHtml(group.ariaName)} bottle intake chart"${milkChartStyle}>
         <div class="charts-milk-canvas-wrap">
-          <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${escapeHtml(group.ariaName)} milk intake by baby"></canvas>
+          <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${escapeHtml(group.ariaName)} bottle intake by baby"></canvas>
         </div>
       </div>
       ${emptyNote}
@@ -4935,20 +5203,14 @@ function initMilkIntakeChart(activeBabies) {
 
 function renderExpressingTrend(activeParents) {
   const range = selectedExpressStatsRangeBounds();
-  const group = milkChartGroupById(_expressChartGroup);
   const visibleParents = visibleExpressChartParents(activeParents);
   const stats = expressingStats(range.start, range.end, activeParents);
-  const model = expressingBuckets(
-    range.start,
-    range.end,
-    visibleParents,
-    group.id,
-  );
-  const denseChart = group.hours < 24 && model.buckets.length > 28;
+  const model = expressingBuckets(range.start, range.end, visibleParents);
+  const denseChart = model.buckets.length > 28;
   const chartStyle = denseChart
-    ? ` style="--milk-chart-min-width:${Math.max(760, model.buckets.length * 18)}px"`
+    ? ` style="--milk-chart-min-width:${Math.max(760, model.buckets.length * 26)}px"`
     : '';
-  const emptyNote = model.total
+  const emptyNote = model.totalCount
     ? ''
     : '<p class="charts-milk-empty">No expressing logged for selected parents in this range.</p>';
 
@@ -4970,41 +5232,29 @@ function renderExpressingTrend(activeParents) {
           <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_expressStatsCustomEnd) : ''}" data-express-chart-date="end" />
         </label>
       </div>
-      <div class="charts-milk-group-row">
-        <span class="charts-milk-group-label">Bars</span>
-        <div class="dash-range-options charts-milk-group" role="radiogroup" aria-label="Expressing bar grouping">
-          ${MILK_CHART_GROUP_OPTIONS.map(
-            (option) => `
-            <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === group.id}" data-express-chart-group="${escapeHtml(option.id)}">
-              ${escapeHtml(option.name)}
-            </button>`,
-          ).join('')}
-        </div>
-      </div>
       <div class="charts-milk-metrics" aria-label="Expressing summaries">
         ${activeParents
           .map((parent) => {
             const stat = stats[parent.id] || {};
-            const sessions = stat.sessions || 0;
             const isVisible = !_hiddenExpressChartUserIds.has(parent.id);
             const cannotHide = isVisible && visibleParents.length <= 1;
             return `
           <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-express-chart-parent="${escapeHtml(parent.id)}" style="--baby-colour:${parent.colour}" ${cannotHide ? 'disabled title="At least one parent must remain visible"' : ''}>
             <span class="charts-milk-metric-head">
               <span class="charts-milk-metric-name"><span class="charts-milk-baby-swatch" aria-hidden="true"></span>${escapeHtml(parent.name)}</span>
-              <span class="charts-milk-metric-feeds">${escapeHtml(sessions === 1 ? '1 session' : `${sessions} sessions`)}</span>
+              <span class="charts-milk-metric-feeds">${escapeHtml(`${stat.todaySessions || 0} today`)}</span>
             </span>
             <span class="charts-milk-metric-values">
               <span><small>Total</small>${escapeHtml(stat.total ? formatMilkAmount(stat.total) : '—')}</span>
-              <span><small>Avg session</small>${escapeHtml(stat.avgSession != null ? formatMilkAmount(stat.avgSession) : '—')}</span>
+              <span><small>Sessions</small>${escapeHtml(stat.sessions || 0)}</span>
             </span>
           </button>`;
           })
           .join('')}
       </div>
-      <div class="charts-milk-scroll ${denseChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${escapeHtml(group.ariaName)} expressing chart"${chartStyle}>
+      <div class="charts-milk-scroll ${denseChart ? 'charts-milk-scroll--dense' : ''}" aria-label="Daily expressing chart"${chartStyle}>
         <div class="charts-milk-canvas-wrap">
-          <canvas id="charts-express-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${escapeHtml(group.ariaName)} expressing by parent"></canvas>
+          <canvas id="charts-express-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="Daily expressed volume and sessions by parent"></canvas>
         </div>
       </div>
       ${emptyNote}
@@ -5017,14 +5267,8 @@ function initExpressingChart(activeParents) {
   if (!canvas || !globalThis.Chart) return;
 
   const range = selectedExpressStatsRangeBounds();
-  const group = milkChartGroupById(_expressChartGroup);
   const visibleParents = visibleExpressChartParents(activeParents);
-  const model = expressingBuckets(
-    range.start,
-    range.end,
-    visibleParents,
-    group.id,
-  );
+  const model = expressingBuckets(range.start, range.end, visibleParents);
   const rootStyles = getComputedStyle(document.documentElement);
   const chartGridColor =
     rootStyles.getPropertyValue('--chart-grid').trim() ||
@@ -5036,17 +5280,39 @@ function initExpressingChart(activeParents) {
     type: 'bar',
     data: {
       labels: model.buckets.map((bucket) =>
-        formatMilkChartBucketLabel(bucket.timestamp, group, range.days),
+        formatMilkChartDate(bucket.timestamp, true),
       ),
-      datasets: visibleParents.map((parent) => ({
-        label: parent.name,
-        data: model.totals[parent.id],
-        backgroundColor: parent.colour,
-        borderColor: parent.colour,
-        borderRadius: 4,
-        borderSkipped: false,
-        maxBarThickness: 34,
-      })),
+      datasets: visibleParents.flatMap((parent) => [
+        {
+          type: 'bar',
+          label: `${parent.name} volume`,
+          subjectName: parent.name,
+          metric: 'volume',
+          data: model.quantities[parent.id],
+          backgroundColor: parent.colour,
+          borderColor: parent.colour,
+          borderRadius: 4,
+          borderSkipped: false,
+          maxBarThickness: 34,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: `${parent.name} sessions`,
+          subjectName: parent.name,
+          metric: 'count',
+          data: model.counts[parent.id],
+          backgroundColor: parent.colour,
+          borderColor: parent.colour,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          tension: 0.25,
+          yAxisID: 'yCount',
+          order: 1,
+        },
+      ]),
     },
     options: {
       responsive: true,
@@ -5058,31 +5324,23 @@ function initExpressingChart(activeParents) {
           callbacks: {
             title: (items) => {
               const bucket = model.buckets[items[0]?.dataIndex];
-              if (!bucket) return '';
-              return group.hours < 24
-                ? formatMilkChartHour(bucket.timestamp, true)
-                : formatMilkChartDate(bucket.timestamp);
+              return bucket ? formatMilkChartDate(bucket.timestamp) : '';
             },
-            label: (context) =>
-              `${context.dataset.label}: ${Math.round(context.parsed.y).toLocaleString()} ml`,
-            footer: (items) => {
-              const total = items.reduce(
-                (sum, item) => sum + Number(item.parsed.y || 0),
-                0,
-              );
-              return `Total: ${Math.round(total).toLocaleString()} ml`;
+            label: (context) => {
+              const value = Math.round(context.parsed.y).toLocaleString();
+              return context.dataset.metric === 'count'
+                ? `${context.dataset.subjectName}: ${value} ${Number(context.parsed.y) === 1 ? 'session' : 'sessions'}`
+                : `${context.dataset.subjectName}: ${value} ml`;
             },
           },
         },
       },
       scales: {
         x: {
-          stacked: false,
           ticks: {
             color: chartTextColor,
-            autoSkip: group.hours < 24 || range.days > 7,
-            maxTicksLimit:
-              group.hours < 24 ? 8 : range.days > 7 ? 10 : 7,
+            autoSkip: range.days > 7,
+            maxTicksLimit: range.days > 7 ? 10 : 7,
           },
           grid: { display: false },
         },
@@ -5095,6 +5353,186 @@ function initExpressingChart(activeParents) {
             callback: (value) => `${Number(value).toLocaleString()} ml`,
           },
           grid: { color: chartGridColor },
+        },
+        yCount: {
+          position: 'right',
+          beginAtZero: true,
+          ticks: {
+            color: chartTextColor,
+            precision: 0,
+            stepSize: 1,
+          },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+  const scroll = canvas.closest('.charts-milk-scroll--dense');
+  if (scroll) scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+}
+
+function renderBreastFeedTrend(activeBabies) {
+  const range = selectedBreastStatsRangeBounds();
+  const visibleBabies = visibleBreastChartBabies(activeBabies);
+  const stats = breastFeedStats(range.start, range.end, activeBabies);
+  const model = breastFeedBuckets(range.start, range.end, visibleBabies);
+  const denseChart = model.buckets.length > 28;
+  const chartStyle = denseChart
+    ? ` style="--milk-chart-min-width:${Math.max(760, model.buckets.length * 26)}px"`
+    : '';
+  const emptyNote = model.totalCount
+    ? ''
+    : '<p class="charts-milk-empty">No breast feeds logged for selected babies in this range.</p>';
+
+  return `
+    <div class="charts-milk-plot">
+      <div class="dash-range-options charts-milk-ranges" role="radiogroup" aria-label="Breast feed chart range">
+        ${MILK_STATS_RANGE_OPTIONS.map(
+          (option) => `
+          <button class="dash-range-option" type="button" role="radio" aria-checked="${option.id === range.id}" data-breast-chart-range="${escapeHtml(option.id)}">
+            ${escapeHtml(option.name)}
+          </button>`,
+        ).join('')}
+      </div>
+      <div class="dash-custom-range charts-milk-custom-range ${range.id === 'custom' ? '' : 'hidden'}">
+        <label class="dash-range-label">From
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_breastStatsCustomStart) : ''}" data-breast-chart-date="start" />
+        </label>
+        <label class="dash-range-label">To
+          <input class="dash-range-input" type="date" value="${range.id === 'custom' ? escapeHtml(_breastStatsCustomEnd) : ''}" data-breast-chart-date="end" />
+        </label>
+      </div>
+      <div class="charts-milk-metrics" aria-label="Breast feed summaries">
+        ${activeBabies
+          .map((baby) => {
+            const stat = stats[baby.id] || {};
+            const isVisible = !_hiddenBreastChartBabyIds.has(baby.id);
+            const cannotHide = isVisible && visibleBabies.length <= 1;
+            return `
+          <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-breast-chart-baby="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}" ${cannotHide ? 'disabled title="At least one baby must remain visible"' : ''}>
+            <span class="charts-milk-metric-head">
+              <span class="charts-milk-metric-name"><span class="charts-milk-baby-swatch" aria-hidden="true"></span>${escapeHtml(baby.name)}</span>
+              <span class="charts-milk-metric-feeds">${escapeHtml(`${stat.todayFeeds || 0} today`)}</span>
+            </span>
+            <span class="charts-milk-metric-values">
+              <span><small>Total</small>${escapeHtml(stat.totalMinutes ? formatDuration(stat.totalMinutes * 60000) : '—')}</span>
+              <span><small>Avg feed</small>${escapeHtml(stat.avgMinutes != null ? formatDuration(stat.avgMinutes * 60000) : '—')}</span>
+            </span>
+          </button>`;
+          })
+          .join('')}
+      </div>
+      <div class="charts-milk-scroll ${denseChart ? 'charts-milk-scroll--dense' : ''}" aria-label="Daily breast feed chart"${chartStyle}>
+        <div class="charts-milk-canvas-wrap">
+          <canvas id="charts-breast-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="Daily breast feed duration and feed count by baby"></canvas>
+        </div>
+      </div>
+      ${emptyNote}
+    </div>`;
+}
+
+function initBreastFeedChart(activeBabies) {
+  destroyBreastFeedChart();
+  const canvas = document.getElementById('charts-breast-canvas');
+  if (!canvas || !globalThis.Chart) return;
+
+  const range = selectedBreastStatsRangeBounds();
+  const visibleBabies = visibleBreastChartBabies(activeBabies);
+  const model = breastFeedBuckets(range.start, range.end, visibleBabies);
+  const rootStyles = getComputedStyle(document.documentElement);
+  const chartGridColor =
+    rootStyles.getPropertyValue('--chart-grid').trim() ||
+    'rgba(142, 142, 147, 0.22)';
+  const chartTextColor =
+    rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+
+  breastFeedChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: model.buckets.map((bucket) =>
+        formatMilkChartDate(bucket.timestamp, true),
+      ),
+      datasets: visibleBabies.flatMap((baby) => [
+        {
+          type: 'bar',
+          label: `${baby.name} duration`,
+          subjectName: baby.name,
+          metric: 'duration',
+          data: model.quantities[baby.id],
+          backgroundColor: baby.colour,
+          borderColor: baby.colour,
+          borderRadius: 4,
+          borderSkipped: false,
+          maxBarThickness: 34,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          type: 'line',
+          label: `${baby.name} feeds`,
+          subjectName: baby.name,
+          metric: 'count',
+          data: model.counts[baby.id],
+          backgroundColor: baby.colour,
+          borderColor: baby.colour,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          tension: 0.25,
+          yAxisID: 'yCount',
+          order: 1,
+        },
+      ]),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const bucket = model.buckets[items[0]?.dataIndex];
+              return bucket ? formatMilkChartDate(bucket.timestamp) : '';
+            },
+            label: (context) => {
+              const value = Math.round(context.parsed.y).toLocaleString();
+              return context.dataset.metric === 'count'
+                ? `${context.dataset.subjectName}: ${value} ${Number(context.parsed.y) === 1 ? 'feed' : 'feeds'}`
+                : `${context.dataset.subjectName}: ${value} min`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: chartTextColor,
+            autoSkip: range.days > 7,
+            maxTicksLimit: range.days > 7 ? 10 : 7,
+          },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: chartTextColor,
+            maxTicksLimit: 6,
+            precision: 0,
+            callback: (value) => `${Number(value).toLocaleString()} min`,
+          },
+          grid: { color: chartGridColor },
+        },
+        yCount: {
+          position: 'right',
+          beginAtZero: true,
+          ticks: {
+            color: chartTextColor,
+            precision: 0,
+            stepSize: 1,
+          },
+          grid: { drawOnChartArea: false },
         },
       },
     },
@@ -5241,6 +5679,88 @@ function updateWeightFromLbOzInputs() {
   updateSaveBtn();
 }
 
+function renderMilkAdditiveChoices() {
+  const step = document.getElementById('step-milk-additives');
+  const container = document.getElementById('milk-additive-select');
+  const additives = milkAdditives();
+  const shouldShow =
+    formState.type === 'milk' &&
+    formState.milkMethod === 'bottle' &&
+    additives.length > 0;
+  step.classList.toggle('hidden', !shouldShow);
+
+  if (!shouldShow) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const selectedIds = new Set(selectedMilkAdditiveIds());
+  container.innerHTML = additives
+    .map(
+      (additive) => `
+        <label class="milk-additive-option">
+          <input type="checkbox" data-milk-additive-id="${escapeHtml(additive.id)}" ${selectedIds.has(additive.id) ? 'checked' : ''} />
+          <span>${escapeHtml(additive.label)}</span>
+        </label>`,
+    )
+    .join('');
+
+  container.querySelectorAll('[data-milk-additive-id]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const next = new Set(selectedMilkAdditiveIds());
+      if (input.checked) next.add(input.dataset.milkAdditiveId);
+      else next.delete(input.dataset.milkAdditiveId);
+      formState.milkAdditiveIds = [...next];
+    });
+  });
+}
+
+function renderMilkFlowOptions() {
+  const isMilk = formState.type === 'milk';
+  const isBottle = isMilk && formState.milkMethod === 'bottle';
+  const isBreast = isMilk && formState.milkMethod === 'breast';
+  document
+    .getElementById('step-milk-method')
+    .classList.toggle('hidden', !isMilk);
+  document
+    .getElementById('amount-group')
+    .classList.toggle(
+      'hidden',
+      !(isBottle || formState.type === 'express'),
+    );
+  document
+    .getElementById('breast-duration-group')
+    .classList.toggle('hidden', !isBreast);
+  renderMilkAdditiveChoices();
+}
+
+function renderMilkMethodButtons() {
+  if (formState.type !== 'milk') {
+    document.getElementById('milk-method-buttons').innerHTML = '';
+    renderMilkFlowOptions();
+    return;
+  }
+
+  renderSelButtons(
+    'milk-method-buttons',
+    [
+      { id: 'bottle', name: '🍼 Bottle' },
+      { id: 'breast', name: 'Breast' },
+    ],
+    'milkMethod',
+    () => {
+      formState.amount = '';
+      formState.durationMinutes = '';
+      resetMilkAdditiveSelection();
+      document.getElementById('amount-input').value = '';
+      document.getElementById('breast-duration-input').value = '';
+      renderMilkFlowOptions();
+      updateSaveBtn();
+    },
+  );
+  renderMilkFlowOptions();
+}
+
 function renderTypeButtons() {
   if (formState.type === 'express' && !findUser(formState.user)?.canExpress) {
     formState.type = null;
@@ -5259,6 +5779,7 @@ function renderTypeButtons() {
 
   renderSelButtons('type-buttons', types, 'type', (selectedId) => {
     resetMedicationSelection();
+    resetMilkFlow();
     formState.amount = '';
     const amountInput = document.getElementById('amount-input');
     amountInput.value = '';
@@ -5267,45 +5788,54 @@ function renderTypeButtons() {
 
     const medStep = document.getElementById('step-medication');
     const amountGroup = document.getElementById('amount-group');
+    const breastDurationGroup = document.getElementById(
+      'breast-duration-group',
+    );
     const weightGroup = document.getElementById('weight-group');
+
+    amountGroup.classList.add('hidden');
+    breastDurationGroup.classList.add('hidden');
+    weightGroup.classList.add('hidden');
 
     if (selectedId === 'medication') {
       medStep.classList.remove('hidden');
-      amountGroup.classList.add('hidden');
-      weightGroup.classList.add('hidden');
       resetWeightInputs();
       renderMedButtons();
       renderMedIntervals(formState.baby);
     } else if (selectedId === 'poo') {
       medStep.classList.add('hidden');
-      amountGroup.classList.add('hidden');
-      weightGroup.classList.add('hidden');
       resetWeightInputs();
       document.getElementById('medication-intervals').innerHTML = '';
     } else if (selectedId === 'weight') {
       medStep.classList.add('hidden');
-      amountGroup.classList.add('hidden');
       weightGroup.classList.remove('hidden');
+      document.getElementById('medication-intervals').innerHTML = '';
+    } else if (selectedId === 'milk') {
+      medStep.classList.add('hidden');
+      resetWeightInputs();
       document.getElementById('medication-intervals').innerHTML = '';
     } else {
       medStep.classList.add('hidden');
       amountGroup.classList.remove('hidden');
-      weightGroup.classList.add('hidden');
       resetWeightInputs();
       document.getElementById('medication-intervals').innerHTML = '';
     }
 
     updateUnitLabel();
+    renderMilkMethodButtons();
     updateSaveBtn();
     updateMedicationTypeButtonStatus();
   });
 
   updateMedicationTypeButtonStatus();
+  renderMilkMethodButtons();
 
   if (!formState.type)
     document.getElementById('amount-group').classList.add('hidden');
   if (!formState.type)
     document.getElementById('weight-group').classList.add('hidden');
+  if (!formState.type)
+    document.getElementById('breast-duration-group').classList.add('hidden');
   if (!medications().length) {
     const medBtn = document.querySelector(
       '#type-buttons .sel-btn[data-id="medication"]',
@@ -5650,6 +6180,10 @@ function updateSaveBtn() {
     selectedMeds.every(({ amount }) => parseFloat(amount) > 0);
   const expressingOk =
     formState.type !== 'express' || findUser(formState.user)?.canExpress;
+  const milkOk =
+    formState.type !== 'milk' ||
+    formState.milkMethod === 'bottle' ||
+    formState.milkMethod === 'breast';
   const medOk =
     formState.type === 'milk' ||
     formState.type === 'weight' ||
@@ -5659,10 +6193,12 @@ function updateSaveBtn() {
   const amountOk =
     formState.type === 'poo' ||
     formState.type === 'medication' ||
-    parseFloat(formState.amount) > 0;
+    (formState.type === 'milk' && formState.milkMethod === 'breast'
+      ? parseFloat(formState.durationMinutes) > 0
+      : parseFloat(formState.amount) > 0);
   const babyOk = formState.type === 'express' || formState.baby;
   const ready =
-    formState.user && babyOk && formState.type && medOk && amountOk;
+    formState.user && babyOk && formState.type && milkOk && medOk && amountOk;
   document.getElementById('save-btn').disabled = !ready;
 }
 
@@ -5697,10 +6233,23 @@ async function saveEntry() {
         user: formState.user,
         baby: formState.type === 'express' ? null : formState.baby,
         type: formState.type,
-        ...(formState.type !== 'poo' && {
+        ...(formState.type !== 'poo' &&
+          !(formState.type === 'milk' && formState.milkMethod === 'breast') && {
           amount: parseFloat(formState.amount),
           unit: currentUnit(),
         }),
+        ...(formState.type === 'milk' && {
+          milkMethod: formState.milkMethod,
+        }),
+        ...(formState.type === 'milk' &&
+          formState.milkMethod === 'breast' && {
+            durationMinutes: parseFloat(formState.durationMinutes),
+          }),
+        ...(formState.type === 'milk' &&
+          formState.milkMethod === 'bottle' &&
+          selectedMilkAdditiveIds().length > 0 && {
+            milkAdditiveIds: selectedMilkAdditiveIds(),
+          }),
         medication: formState.medication,
         createdAt: stamp,
         updatedAt: stamp,
@@ -5736,10 +6285,19 @@ async function saveEntry() {
           ? 'Weight'
           : formState.type === 'express'
             ? 'Expressed'
-            : 'Milk';
+            : entry.milkMethod === 'breast'
+              ? 'Breast feed'
+              : [
+                  'Bottle',
+                  ...milkAdditiveNames(entry.milkAdditiveIds, {
+                    includeDeleted: true,
+                  }),
+                ].join(' + ');
     amountStr =
       formState.type === 'weight'
         ? ` ${formatWeightLbOz(weightGrams(entry))}`
+        : formState.type === 'milk' && entry.milkMethod === 'breast'
+          ? ` ${milkDurationMinutes(entry)} min`
         : formState.type !== 'poo'
           ? ` ${entry.amount} ${entry.unit}`
           : '';
@@ -5755,10 +6313,14 @@ async function saveEntry() {
 
   formState.type = null;
   resetMedicationSelection();
+  resetMilkFlow();
   formState.amount = '';
   renderTypeButtons();
   document.getElementById('step-medication').classList.add('hidden');
+  document.getElementById('step-milk-method').classList.add('hidden');
+  document.getElementById('step-milk-additives').classList.add('hidden');
   document.getElementById('amount-group').classList.add('hidden');
+  document.getElementById('breast-duration-group').classList.add('hidden');
   document.getElementById('weight-group').classList.add('hidden');
   document.getElementById('amount-input').value = '';
   resetWeightInputs();
@@ -5774,13 +6336,17 @@ function clearForm() {
   formState.baby = null;
   formState.type = null;
   resetMedicationSelection();
+  resetMilkFlow();
   formState.amount = '';
 
   renderUserButtons();
   renderBabyButtons();
   renderTypeButtons();
   document.getElementById('step-medication').classList.add('hidden');
+  document.getElementById('step-milk-method').classList.add('hidden');
+  document.getElementById('step-milk-additives').classList.add('hidden');
   document.getElementById('amount-group').classList.add('hidden');
+  document.getElementById('breast-duration-group').classList.add('hidden');
   document.getElementById('weight-group').classList.add('hidden');
   const amountInput = document.getElementById('amount-input');
   amountInput.value = '';
@@ -5811,6 +6377,9 @@ function renderLog() {
       const baby = findBaby(e.baby);
       const user = findUser(e.user);
       const med = e.medication ? findMed(e.medication) : null;
+      const additiveNames = milkAdditiveNames(e.milkAdditiveIds, {
+        includeDeleted: true,
+      });
       const emoji =
         e.type === 'medication'
           ? '💊'
@@ -5828,7 +6397,9 @@ function renderLog() {
               ? 'Weight'
               : e.type === 'express'
                 ? 'Expressed'
-                : 'Milk';
+                : e.milkMethod === 'breast'
+                  ? 'Breast feed'
+                  : escapeHtml(['Bottle', ...additiveNames].join(' + '));
       const primary =
         e.type === 'poo'
           ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> had a moment`
@@ -5836,7 +6407,9 @@ function renderLog() {
             ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> weighed <span class="log-val">${escapeHtml(formatWeightLbOz(weightGrams(e)))}</span>`
             : e.type === 'express'
               ? `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> <span class="log-val">${typeName}</span>`
-              : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
+              : e.type === 'milk' && e.milkMethod === 'breast'
+                ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> breastfed for <span class="log-val">${escapeHtml(milkDurationMinutes(e))} min</span>`
+                : `<span class="log-val">${escapeHtml(e.amount)}${escapeHtml(e.unit)}</span> of <span class="log-val">${typeName}</span> given to <span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span>`;
       const editableMedications = medicationsForBaby(e.baby);
       if (med && !editableMedications.some((item) => item.id === med.id)) {
         editableMedications.unshift(med);
@@ -5870,8 +6443,8 @@ function renderLog() {
         <div class="log-edit-form hidden" data-edit-id="${e.id}">
           ${
             e.type !== 'poo'
-              ? `<label class="log-edit-label">${e.type === 'weight' ? 'Weight (g)' : 'Amount'}
-                  <input class="log-edit-input" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" data-field="amount" value="${escapeHtml(e.type === 'weight' ? Math.round(weightGrams(e)) : e.amount)}" autocomplete="off" autocorrect="off" spellcheck="false" />
+              ? `<label class="log-edit-label">${e.type === 'weight' ? 'Weight (g)' : e.type === 'milk' && e.milkMethod === 'breast' ? 'Duration (minutes)' : 'Amount'}
+                  <input class="log-edit-input" type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" data-field="${e.type === 'milk' && e.milkMethod === 'breast' ? 'durationMinutes' : 'amount'}" value="${escapeHtml(e.type === 'weight' ? Math.round(weightGrams(e)) : e.type === 'milk' && e.milkMethod === 'breast' ? milkDurationMinutes(e) : e.amount)}" autocomplete="off" autocorrect="off" spellcheck="false" />
                 </label>`
               : ''
           }
@@ -5932,12 +6505,15 @@ function renderLog() {
     btn.addEventListener('click', async () => {
       const form = list.querySelector(`[data-edit-id="${btn.dataset.id}"]`);
       const amtInput = form.querySelector('[data-field="amount"]');
+      const durationInput = form.querySelector('[data-field="durationMinutes"]');
       const tsInput = form.querySelector('[data-field="timestamp"]');
       const medInput = form.querySelector('[data-field="medication"]');
       await mutateData((next) => {
         const entry = next.entries.find((item) => item.id === btn.dataset.id);
         if (!entry) return;
         if (amtInput) entry.amount = parseFloat(amtInput.value);
+        if (durationInput)
+          entry.durationMinutes = parseFloat(durationInput.value);
         if (amtInput && entry.type === 'weight') entry.unit = WEIGHT_UNIT;
         if (tsInput?.value)
           entry.timestamp = new Date(tsInput.value).toISOString();
@@ -6125,6 +6701,109 @@ async function savePersonForm() {
     }
   });
   closePersonForm();
+  showSettingsConfirmation();
+}
+
+function renderMilkAdditiveCards() {
+  const el = document.getElementById('settings-milk-additives');
+  el.innerHTML = '';
+  const additives = milkAdditives();
+  if (!additives.length) {
+    el.innerHTML =
+      '<p class="log-empty" style="padding:20px 0">No milk additives yet.</p>';
+    return;
+  }
+
+  additives.forEach((additive) => {
+    const card = document.createElement('div');
+    card.className = 'med-card';
+    card.innerHTML = `
+      <div class="med-card-info">
+        <div class="med-card-name">${escapeHtml(additive.label)}</div>
+      </div>
+      <button class="med-card-edit-btn" data-id="${additive.id}" title="Edit">✎</button>
+      <button class="settings-delete-btn" data-id="${additive.id}" title="Delete">×</button>
+    `;
+    el.appendChild(card);
+  });
+
+  el.querySelectorAll('.med-card-edit-btn').forEach((btn) =>
+    btn.addEventListener('click', () =>
+      openMilkAdditiveForm(btn.dataset.id),
+    ),
+  );
+  el.querySelectorAll('.settings-delete-btn').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      await mutateData((next) => {
+        const additive = next.milkAdditives.find(
+          (record) => record.id === btn.dataset.id,
+        );
+        if (additive) {
+          additive.deletedAt = nowIso();
+          additive.updatedAt = additive.deletedAt;
+        }
+      });
+    }),
+  );
+}
+
+function openMilkAdditiveForm(id = null) {
+  _milkAdditiveEditId = id;
+  const additive = id
+    ? data.milkAdditives.find((record) => record.id === id)
+    : null;
+  document.getElementById('milk-additive-form-title').textContent = additive
+    ? 'Edit milk additive'
+    : 'New milk additive';
+  document.getElementById('milk-additive-form-label').value =
+    additive?.label || '';
+  document.getElementById('milk-additive-form').classList.remove('hidden');
+  document.getElementById('add-milk-additive-btn').classList.add('hidden');
+  document.getElementById('milk-additive-form-label').focus();
+}
+
+function closeMilkAdditiveForm() {
+  document.getElementById('milk-additive-form').classList.add('hidden');
+  document.getElementById('add-milk-additive-btn').classList.remove('hidden');
+  _milkAdditiveEditId = null;
+}
+
+async function saveMilkAdditiveForm() {
+  const label = document
+    .getElementById('milk-additive-form-label')
+    .value.trim();
+  if (!label) {
+    document.getElementById('milk-additive-form-label').focus();
+    return;
+  }
+  const stamp = nowIso();
+
+  await mutateData((next) => {
+    const additive = {
+      id: _milkAdditiveEditId || slugify(label, 'milk_additive_'),
+      label,
+      createdAt: stamp,
+      updatedAt: stamp,
+      deletedAt: null,
+    };
+
+    if (_milkAdditiveEditId) {
+      const idx = next.milkAdditives.findIndex(
+        (item) => item.id === _milkAdditiveEditId,
+      );
+      if (idx >= 0) {
+        next.milkAdditives[idx] = {
+          ...next.milkAdditives[idx],
+          ...additive,
+          createdAt: next.milkAdditives[idx].createdAt,
+        };
+      }
+    } else {
+      next.milkAdditives.push(additive);
+    }
+  });
+
+  closeMilkAdditiveForm();
   showSettingsConfirmation();
 }
 
@@ -6796,6 +7475,7 @@ function renderSettings() {
   renderPersonCards('babies');
   renderGrowthChartSettings();
   renderMedCards();
+  renderMilkAdditiveCards();
   renderMedicationReminderSettings();
   updateSyncUi();
 }
@@ -6878,12 +7558,9 @@ function renderDashboard() {
         ? Math.round(stats.rollingAmount / stats.rollingFeeds)
         : null;
       const avgText = avg != null ? formatMilkAmount(avg) : '—';
-      const previousAmountText =
-        stats?.previousAt != null
-          ? formatMilkAmount(stats.previousAmount)
-          : '—';
-      const lastAmountText =
-        stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
+      const previousFeedValue =
+        stats?.previousAt != null ? stats.previousValue : '—';
+      const lastFeedValue = stats?.lastAt != null ? stats.lastValue : '';
       return `
       <div class="dash-live-metric" data-live-baby-id="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}">
         <div class="dash-live-heading">
@@ -6895,16 +7572,16 @@ function renderDashboard() {
           <span class="dash-live-last-label">Last feed</span>
           <span class="dash-live-last-value">${escapeHtml(lastFeed)}</span>
           <span class="dash-live-last-amount" ${stats?.lastAt != null ? '' : 'hidden'}>${escapeHtml(
-            lastAmountText,
+            lastFeedValue,
           )}</span>
         </div>
         <div class="dash-live-rolling">
           <div class="dash-live-stat">
             <span class="dash-live-stat-label">Feed before last</span>
-            <span class="dash-live-stat-value">${escapeHtml(previousAmountText)}</span>
+            <span class="dash-live-stat-value">${escapeHtml(previousFeedValue)}</span>
           </div>
           <div class="dash-live-stat">
-            <span class="dash-live-stat-label">24h avg</span>
+            <span class="dash-live-stat-label">24h bottle avg</span>
             <span class="dash-live-stat-value">${escapeHtml(avgText)}</span>
           </div>
         </div>
@@ -6938,8 +7615,9 @@ function renderCharts() {
   const activeBabies = babies();
   if (_activeChartPage === 'milk') {
     destroyWeightTrendChart();
+    destroyBreastFeedChart();
     destroyExpressingChart();
-    if (title) title.textContent = 'Milk intake';
+    if (title) title.textContent = 'Bottle intake';
     if (summary) summary.textContent = selectedMilkStatsRangeBounds().summary;
     if (!activeBabies.length) {
       destroyMilkIntakeChart();
@@ -6953,9 +7631,29 @@ function renderCharts() {
     return;
   }
 
+  if (_activeChartPage === 'breast') {
+    destroyWeightTrendChart();
+    destroyMilkIntakeChart();
+    destroyExpressingChart();
+    if (title) title.textContent = 'Breast feeds';
+    if (summary)
+      summary.textContent = selectedBreastStatsRangeBounds().summary;
+    if (!activeBabies.length) {
+      destroyBreastFeedChart();
+      chartContent.innerHTML =
+        '<p class="log-empty" style="padding:40px 0">No babies configured.</p>';
+      return;
+    }
+
+    chartContent.innerHTML = renderBreastFeedTrend(activeBabies);
+    initBreastFeedChart(activeBabies);
+    return;
+  }
+
   if (_activeChartPage === 'express') {
     destroyWeightTrendChart();
     destroyMilkIntakeChart();
+    destroyBreastFeedChart();
     if (title) title.textContent = 'Expressing';
     if (summary)
       summary.textContent = selectedExpressStatsRangeBounds().summary;
@@ -6973,6 +7671,7 @@ function renderCharts() {
   }
 
   destroyMilkIntakeChart();
+  destroyBreastFeedChart();
   destroyExpressingChart();
   if (title) title.textContent = 'Weight trend';
   if (summary) summary.textContent = growthSettingSummary();
@@ -7012,8 +7711,7 @@ function refreshDashboardLiveTimes() {
       const amountEl = metric.querySelector('.dash-live-last-amount');
       if (valueEl) valueEl.textContent = lastFeed;
       if (amountEl) {
-        amountEl.textContent =
-          stats?.lastAt != null ? formatMilkAmount(stats.lastAmount) : '';
+        amountEl.textContent = stats?.lastAt != null ? stats.lastValue : '';
         amountEl.hidden = stats?.lastAt == null;
       }
       const medicationEl = metric.querySelector('[data-medication-baby-id]');
@@ -7084,6 +7782,7 @@ function setActiveTab(tabName) {
   if (tabName !== 'charts') {
     destroyWeightTrendChart();
     destroyMilkIntakeChart();
+    destroyBreastFeedChart();
     destroyExpressingChart();
   }
 }
@@ -7203,6 +7902,12 @@ function wireApp() {
     formState.amount = val;
     updateSaveBtn();
   });
+  document
+    .getElementById('breast-duration-input')
+    .addEventListener('input', (e) => {
+      formState.durationMinutes = cleanDecimalInput(e.target);
+      updateSaveBtn();
+    });
 
   document
     .getElementById('weight-grams-input')
@@ -7245,6 +7950,15 @@ function wireApp() {
   document
     .getElementById('med-form-save')
     .addEventListener('click', saveMedForm);
+  document
+    .getElementById('add-milk-additive-btn')
+    .addEventListener('click', () => openMilkAdditiveForm(null));
+  document
+    .getElementById('milk-additive-form-cancel')
+    .addEventListener('click', closeMilkAdditiveForm);
+  document
+    .getElementById('milk-additive-form-save')
+    .addEventListener('click', saveMilkAdditiveForm);
   document
     .getElementById('medication-reminder-btn')
     .addEventListener('click', () => {
@@ -7301,12 +8015,6 @@ function wireApp() {
   document
     .getElementById('charts-content')
     .addEventListener('click', (event) => {
-      const expressGroupBtn = event.target.closest('[data-express-chart-group]');
-      if (expressGroupBtn) {
-        selectExpressChartGroup(expressGroupBtn.dataset.expressChartGroup);
-        renderCharts();
-        return;
-      }
       const parentBtn = event.target.closest('[data-express-chart-parent]');
       if (parentBtn) {
         if (
@@ -7321,6 +8029,23 @@ function wireApp() {
       const expressRangeBtn = event.target.closest('[data-express-chart-range]');
       if (expressRangeBtn) {
         selectExpressStatsRange(expressRangeBtn.dataset.expressChartRange);
+        renderCharts();
+        return;
+      }
+      const breastBabyBtn = event.target.closest('[data-breast-chart-baby]');
+      if (breastBabyBtn) {
+        if (
+          toggleBreastChartBaby(
+            breastBabyBtn.dataset.breastChartBaby,
+            babies(),
+          )
+        )
+          renderCharts();
+        return;
+      }
+      const breastRangeBtn = event.target.closest('[data-breast-chart-range]');
+      if (breastRangeBtn) {
+        selectBreastStatsRange(breastRangeBtn.dataset.breastChartRange);
         renderCharts();
         return;
       }
@@ -7349,6 +8074,15 @@ function wireApp() {
         setExpressStatsCustomRange(
           expressInput.dataset.expressChartDate,
           expressInput.value,
+        );
+        renderCharts();
+        return;
+      }
+      const breastInput = event.target.closest('[data-breast-chart-date]');
+      if (breastInput) {
+        setBreastStatsCustomRange(
+          breastInput.dataset.breastChartDate,
+          breastInput.value,
         );
         renderCharts();
         return;

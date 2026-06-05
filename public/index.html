@@ -11,8 +11,8 @@
   <meta name="theme-color" content="#101724" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f9f9f9" data-app-theme-color />
   <title>bblog</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=20260602-223708" />
-  <link rel="icon" href="/icon.svg?v=20260602-223708" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest?v=20260605-135046" />
+  <link rel="icon" href="/icon.svg?v=20260605-135046" type="image/svg+xml" />
   <script>
     (() => {
       try {
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="/styles.css?v=20260602-223708" />
+  <link rel="stylesheet" href="/styles.css?v=20260605-135046" />
 </head>
 <body>
   <div id="pwa-safe-area-bg" class="pwa-safe-area-bg" aria-hidden="true"></div>
@@ -123,10 +123,35 @@
         <div id="medication-intervals"></div>
       </div>
 
+      <div class="form-group hidden" id="step-milk-method">
+        <h2>How was the milk given?</h2>
+        <div id="milk-method-buttons" class="btn-group"></div>
+      </div>
+
       <div class="form-group hidden" id="amount-group">
         <h2>How much? (<span id="unit-label">ml</span>)</h2>
         <input
           id="amount-input"
+          class="amount-input"
+          type="text"
+          inputmode="decimal"
+          pattern="[0-9]*\.?[0-9]*"
+          placeholder="0"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="form-group hidden" id="step-milk-additives">
+        <h2>Milk additives</h2>
+        <div id="milk-additive-select" class="milk-additive-options"></div>
+      </div>
+
+      <div class="form-group hidden" id="breast-duration-group">
+        <h2>How long? (minutes)</h2>
+        <input
+          id="breast-duration-input"
           class="amount-input"
           type="text"
           inputmode="decimal"
@@ -313,6 +338,25 @@
       </div>
 
       <div class="settings-section">
+        <h2>Milk additives</h2>
+        <div id="settings-milk-additives"></div>
+        <button class="settings-add-btn" id="add-milk-additive-btn">+ Add milk additive</button>
+      </div>
+
+      <div id="milk-additive-form" class="med-form hidden">
+        <h3 id="milk-additive-form-title" class="med-form-title">New milk additive</h3>
+        <div class="med-form-fields">
+          <label class="med-form-label">Name
+            <input id="milk-additive-form-label" class="med-form-input" type="text" placeholder="e.g. Fortifier" autocomplete="off" />
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:12px;">
+          <button id="milk-additive-form-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="milk-additive-form-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h2>Medication reminders</h2>
         <div class="medication-reminder-card">
           <div>
@@ -361,6 +405,6 @@
   </nav>
 
   <script src="/vendor/chart.umd.min.js?v=4.5.1"></script>
-  <script src="/app.js?v=20260602-223708"></script>
+  <script src="/app.js?v=20260605-135046"></script>
 </body>
 </html>
