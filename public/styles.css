@@ -1888,32 +1888,6 @@ main::before {
   height: 38px;
 }
 
-.charts-milk-group-row {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.charts-milk-group-label {
-  color: var(--text-muted);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.charts-milk-group {
-  width: 184px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.charts-milk-group .dash-range-option {
-  height: 32px;
-  font-size: 0.72rem;
-}
-
 .charts-milk-baby-swatch {
   display: inline-block;
   flex-shrink: 0;
