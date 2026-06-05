@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v122';
+const APP_VERSION = 'bblog-v123';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -27,6 +27,7 @@ const WEIGHT_GROWTH_SEX_STORAGE_KEY = 'bblog-weight-growth-sex';
 const WEIGHT_GROWTH_PERCENTILES_STORAGE_KEY = 'bblog-weight-growth-percentiles';
 const MEDICATION_NOTIFICATION_HISTORY_KEY = 'bblog-medication-notifications';
 const MEDICATION_BACKGROUND_PUSH_KEY = 'bblog-background-medication-push-at';
+const MEDICATION_DUE_SOON_WINDOW_MS = 3 * 60 * 60 * 1000;
 const MEDICATION_NOTIFICATION_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const MEDICATION_BACKGROUND_NOTIFICATION_SYNC_DELAY_MS = 1200;
 const MEDICATION_BACKGROUND_NOTIFICATION_REFRESH_MS = 5 * 60 * 1000;
@@ -5903,7 +5904,7 @@ function medicationSchedules(now = Date.now()) {
       }
 
       const dueAt = lastAt + intervalMs;
-      const notificationAt = dueAt - intervalMs * 0.25;
+      const notificationAt = dueAt - MEDICATION_DUE_SOON_WINDOW_MS;
       let status = 'upcoming';
       if (now >= dueAt) status = 'overdue';
       else if (now >= notificationAt) status = 'due-soon';
@@ -7442,7 +7443,7 @@ function renderMedicationReminderSettings() {
   }
 
   detail.textContent =
-    'Get one alert when assigned repeat medications are due soon.';
+    'Get one alert when assigned repeat medications have 3 hours remaining.';
   button.textContent = 'Enable';
   button.disabled = false;
 }

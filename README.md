@@ -91,7 +91,7 @@ If "Remember on this device" is enabled, the access key is stored in the browser
 
 ## Medication reminders
 
-Assign medications to babies in Settings and set a repeat interval to show due-soon and overdue alerts on the dashboard. With notifications enabled, bblog sends one due-soon notification when 25% of an interval remains, combining medications that become due together.
+Assign medications to babies in Settings and set a repeat interval to show due-soon and overdue alerts on the dashboard. Medications become due soon when 3 hours remain before they are overdue. With notifications enabled, bblog sends one due-soon notification at that time, combining medications that become due together.
 
 While bblog is open, reminders run locally. When deployed with Vercel Blob, VAPID keys, and the included `/api/notifications` cron, installed PWAs can also receive a generic Web Push notification while closed, including on iOS. The server stores push subscriptions, wake-up times, and hashed reminder ids only; baby names, medication names, doses, and due times remain in the encrypted device vault.
 
