@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v131';
+const APP_VERSION = 'bblog-v132';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -1658,6 +1658,8 @@ let _isOffline = false;
 let _cloudSyncDisabled = false;
 let _demoMode = false;
 let _syncNotificationActive = false;
+let _syncNotificationDismissed = false;
+let _appNotificationHideTimer = null;
 let _installSuggestionVisible = false;
 let _milkStatsRange = 'today';
 let _milkStatsCustomStart = '';
@@ -3055,12 +3057,15 @@ function currentAppNotification() {
   if (
     hasCloudSyncSession() &&
     _syncNotificationActive &&
+    !_syncNotificationDismissed &&
     !_cloudSyncDisabled
   ) {
     return {
       variant: 'sync',
       title: 'Syncing...',
       detail: 'Checking encrypted cloud sync.',
+      dismiss: true,
+      dismissAction: 'sync',
     };
   }
 
@@ -3070,6 +3075,7 @@ function currentAppNotification() {
       title: 'Add bblog to your home screen',
       detail: installSuggestionDetail(),
       dismiss: true,
+      dismissAction: 'install',
       action: deferredInstallPrompt ? 'install' : '',
       actionText: deferredInstallPrompt ? 'Add' : '',
     };
@@ -3083,10 +3089,27 @@ function updateAppNotification() {
   if (!notification) return;
 
   const next = currentAppNotification();
-  notification.className = next
-    ? `app-notification app-notification--${next.variant}`
-    : 'app-notification hidden';
-  if (!next) return;
+  clearTimeout(_appNotificationHideTimer);
+
+  if (!next) {
+    if (
+      notification.classList.contains('app-notification--sync') &&
+      !notification.classList.contains('hidden')
+    ) {
+      notification.classList.add('app-notification--leaving');
+      _appNotificationHideTimer = setTimeout(() => {
+        if (!currentAppNotification()) {
+          notification.className = 'app-notification hidden';
+        }
+      }, 240);
+      return;
+    }
+
+    notification.className = 'app-notification hidden';
+    return;
+  }
+
+  notification.className = `app-notification app-notification--${next.variant}`;
 
   const titleEl = document.getElementById('app-notification-title');
   const detailEl = document.getElementById('app-notification-detail');
@@ -3104,6 +3127,7 @@ function updateAppNotification() {
       'aria-label',
       next.dismiss ? `Dismiss ${next.title}` : 'Dismiss notification',
     );
+    dismissBtn.dataset.action = next.dismissAction || '';
   }
 
   if (actionBtn) {
@@ -3146,12 +3170,20 @@ function setSyncStatus(title, detail) {
 
 function startSyncNotification() {
   if (_demoMode || !session?.accessKey || !session?.familyId) return;
+  if (!_syncNotificationActive) _syncNotificationDismissed = false;
   _syncNotificationActive = true;
+  updateAppNotification();
+}
+
+function dismissSyncNotification() {
+  if (!_syncNotificationActive) return;
+  _syncNotificationDismissed = true;
   updateAppNotification();
 }
 
 function clearSyncNotification() {
   _syncNotificationActive = false;
+  _syncNotificationDismissed = false;
   setSyncStatus('Encrypted sync', syncDetailText());
   updateAppNotification();
 }
@@ -3458,6 +3490,7 @@ function showSetup() {
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('tab-bar').classList.add('hidden');
   _syncNotificationActive = false;
+  _syncNotificationDismissed = false;
   updateInstallSuggestion();
 }
 
@@ -7858,7 +7891,14 @@ function wireSetup() {
 function wireInstallSuggestion() {
   document
     .getElementById('app-notification-dismiss-btn')
-    .addEventListener('click', dismissInstallSuggestion);
+    .addEventListener('click', (event) => {
+      const action = event.currentTarget.dataset.action;
+      if (action === 'sync') {
+        dismissSyncNotification();
+        return;
+      }
+      if (action === 'install') dismissInstallSuggestion();
+    });
   document
     .getElementById('app-notification-action-btn')
     .addEventListener('click', async () => {

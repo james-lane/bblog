@@ -323,6 +323,49 @@ body {
   z-index: 1100;
 }
 
+.app-notification--sync {
+  animation: app-notification-drop-in 0.32s cubic-bezier(0.2, 0.82, 0.3, 1) both;
+}
+
+.app-notification--sync.app-notification--leaving {
+  pointer-events: none;
+  animation: app-notification-lift-out 0.24s cubic-bezier(0.4, 0, 0.8, 0.18) both;
+}
+
+@keyframes app-notification-drop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, calc(-100% - 24px), 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes app-notification-lift-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, calc(-100% - 24px), 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-notification--sync {
+    animation: none;
+  }
+
+  .app-notification--sync.app-notification--leaving {
+    opacity: 0;
+  }
+}
+
 .app-notification--sync,
 .app-notification--offline {
   --notification-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
