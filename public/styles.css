@@ -1949,12 +1949,6 @@ main::before {
   );
 }
 
-.charts-milk-source-swatch--bottle {
-  background:
-    radial-gradient(circle, var(--text-muted) 0 1px, transparent 1.5px)
-    0 0 / 5px 5px;
-}
-
 .charts-milk-metric {
   flex: 1 0 calc((100% - 8px) / 2);
   min-width: 158px;

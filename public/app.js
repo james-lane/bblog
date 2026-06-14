@@ -1,16 +1,15 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v130';
+const APP_VERSION = 'bblog-v131';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
 const MILK_UNIT = 'ml';
 const BOTTLE_MILK_SOURCES = ['expressed', 'formula'];
 const BOTTLE_MILK_CHART_SOURCES = [
-  { id: 'expressed', label: 'expressed' },
-  { id: 'formula', label: 'formula' },
-  { id: 'bottle', label: 'unclassified' },
+  { id: 'expressed', label: 'Expressed' },
+  { id: 'formula', label: 'Formula' },
 ];
 const WEIGHT_UNIT = 'g';
 const GRAMS_PER_OUNCE = 28.349523125;
@@ -2398,7 +2397,6 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 90,
         unit: 'ml',
-        milkSource: 'expressed',
         timestamp: hoursAgo(1.25),
       },
       {
@@ -2647,9 +2645,12 @@ function normalizeData(value) {
         ? { milkMethod: item.milkMethod === 'breast' ? 'breast' : 'bottle' }
         : {}),
       ...((item.type || 'milk') === 'milk' &&
-        item.milkMethod !== 'breast' &&
-        BOTTLE_MILK_SOURCES.includes(item.milkSource)
-        ? { milkSource: item.milkSource }
+        item.milkMethod !== 'breast'
+        ? {
+            milkSource: BOTTLE_MILK_SOURCES.includes(item.milkSource)
+              ? item.milkSource
+              : 'expressed',
+          }
         : {}),
       ...(item.durationMinutes != null && item.durationMinutes !== ''
         ? { durationMinutes: Number(item.durationMinutes) }
@@ -3614,11 +3615,9 @@ function formatMilkFeedValue(entry) {
 function milkFeedLabel(entry, { includeDeleted = false } = {}) {
   if (entry?.milkMethod === 'breast') return 'Breast milk';
   const base =
-    entry?.milkSource === 'expressed'
-      ? 'Bottled expressed milk'
-      : entry?.milkSource === 'formula'
-        ? 'Bottled formula'
-        : 'Bottle';
+    entry?.milkSource === 'formula'
+      ? 'Bottled formula'
+      : 'Bottled expressed milk';
   return [
     base,
     ...milkAdditiveNames(entry?.milkAdditiveIds, { includeDeleted }),
@@ -3626,9 +3625,7 @@ function milkFeedLabel(entry, { includeDeleted = false } = {}) {
 }
 
 function bottleMilkSource(entry) {
-  return BOTTLE_MILK_SOURCES.includes(entry?.milkSource)
-    ? entry.milkSource
-    : 'bottle';
+  return entry?.milkSource === 'formula' ? 'formula' : 'expressed';
 }
 
 function weightGrams(entry) {
@@ -4450,18 +4447,13 @@ function bottleSourceChartBackground(colour, source) {
   context.strokeStyle = colour;
   context.fillStyle = colour;
 
-  if (source === 'formula') {
-    context.lineWidth = 2;
-    [-4, 4, 12].forEach((offset) => {
-      context.beginPath();
-      context.moveTo(offset - 4, 8);
-      context.lineTo(offset + 4, 0);
-      context.stroke();
-    });
-  } else {
-    context.fillRect(2, 2, 2, 2);
-    context.fillRect(6, 6, 2, 2);
-  }
+  context.lineWidth = 2;
+  [-4, 4, 12].forEach((offset) => {
+    context.beginPath();
+    context.moveTo(offset - 4, 8);
+    context.lineTo(offset + 4, 0);
+    context.stroke();
+  });
 
   return context.createPattern(patternCanvas, 'repeat') || colour;
 }
@@ -5103,9 +5095,7 @@ function renderMilkIntakeTrend(activeBabies) {
   const emptyNote = model.total
     ? ''
     : '<p class="charts-milk-empty">No bottle feeds logged for selected babies in this range.</p>';
-  const chartSources = BOTTLE_MILK_CHART_SOURCES.filter(
-    (source) => source.id !== 'bottle' || model.sourceTotals.bottle > 0,
-  );
+  const chartSources = BOTTLE_MILK_CHART_SOURCES;
 
   return `
     <div class="charts-milk-plot">
