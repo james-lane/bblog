@@ -1,11 +1,17 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v124';
+const APP_VERSION = 'bblog-v130';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
 const MILK_UNIT = 'ml';
+const BOTTLE_MILK_SOURCES = ['expressed', 'formula'];
+const BOTTLE_MILK_CHART_SOURCES = [
+  { id: 'expressed', label: 'expressed' },
+  { id: 'formula', label: 'formula' },
+  { id: 'bottle', label: 'unclassified' },
+];
 const WEIGHT_UNIT = 'g';
 const GRAMS_PER_OUNCE = 28.349523125;
 const OUNCES_PER_POUND = 16;
@@ -1621,6 +1627,7 @@ const formState = {
   baby: null,
   type: null,
   milkMethod: null,
+  milkSource: null,
   durationMinutes: '',
   milkAdditiveIds: [],
   medication: null,
@@ -2391,6 +2398,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 90,
         unit: 'ml',
+        milkSource: 'expressed',
         timestamp: hoursAgo(1.25),
       },
       {
@@ -2400,6 +2408,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 120,
         unit: 'ml',
+        milkSource: 'formula',
         timestamp: hoursAgo(5.5),
       },
       {
@@ -2409,6 +2418,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 75,
         unit: 'ml',
+        milkSource: 'expressed',
         timestamp: hoursAgo(12),
       },
       {
@@ -2418,6 +2428,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 105,
         unit: 'ml',
+        milkSource: 'formula',
         timestamp: hoursAgo(27),
       },
       {
@@ -2452,6 +2463,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 110,
         unit: 'ml',
+        milkSource: 'formula',
         timestamp: hoursAgo(2.1),
       },
       {
@@ -2461,6 +2473,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 140,
         unit: 'ml',
+        milkSource: 'expressed',
         timestamp: hoursAgo(9),
       },
       {
@@ -2470,6 +2483,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 95,
         unit: 'ml',
+        milkSource: 'formula',
         timestamp: hoursAgo(18),
       },
       {
@@ -2479,6 +2493,7 @@ function buildDemoData() {
         user: 'demo_parent',
         amount: 130,
         unit: 'ml',
+        milkSource: 'expressed',
         timestamp: hoursAgo(30),
       },
       {
@@ -2631,6 +2646,11 @@ function normalizeData(value) {
       ...((item.type || 'milk') === 'milk'
         ? { milkMethod: item.milkMethod === 'breast' ? 'breast' : 'bottle' }
         : {}),
+      ...((item.type || 'milk') === 'milk' &&
+        item.milkMethod !== 'breast' &&
+        BOTTLE_MILK_SOURCES.includes(item.milkSource)
+        ? { milkSource: item.milkSource }
+        : {}),
       ...(item.durationMinutes != null && item.durationMinutes !== ''
         ? { durationMinutes: Number(item.durationMinutes) }
         : {}),
@@ -2747,6 +2767,7 @@ function resetMilkAdditiveSelection() {
 
 function resetMilkFlow() {
   formState.milkMethod = null;
+  formState.milkSource = null;
   formState.durationMinutes = '';
   resetMilkAdditiveSelection();
   const durationInput = document.getElementById('breast-duration-input');
@@ -3590,6 +3611,26 @@ function formatMilkFeedValue(entry) {
   return formatMilkAmount(milkAmount(entry));
 }
 
+function milkFeedLabel(entry, { includeDeleted = false } = {}) {
+  if (entry?.milkMethod === 'breast') return 'Breast milk';
+  const base =
+    entry?.milkSource === 'expressed'
+      ? 'Bottled expressed milk'
+      : entry?.milkSource === 'formula'
+        ? 'Bottled formula'
+        : 'Bottle';
+  return [
+    base,
+    ...milkAdditiveNames(entry?.milkAdditiveIds, { includeDeleted }),
+  ].join(' + ');
+}
+
+function bottleMilkSource(entry) {
+  return BOTTLE_MILK_SOURCES.includes(entry?.milkSource)
+    ? entry.milkSource
+    : 'bottle';
+}
+
 function weightGrams(entry) {
   const amount = parseFloat(entry.amount);
   if (!Number.isFinite(amount) || amount <= 0) return 0;
@@ -4339,7 +4380,15 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
   const buckets = [];
   const bucketIndexes = new Map();
   const totals = Object.fromEntries(
-    activeBabies.map((baby) => [baby.id, []]),
+    activeBabies.map((baby) => [
+      baby.id,
+      Object.fromEntries(
+        BOTTLE_MILK_CHART_SOURCES.map((source) => [source.id, []]),
+      ),
+    ]),
+  );
+  const sourceTotals = Object.fromEntries(
+    BOTTLE_MILK_CHART_SOURCES.map((source) => [source.id, 0]),
   );
   const firstBucket = new Date(chartBucketStart(start, bucketUnit));
   const finalBucket = chartBucketStart(Math.max(start, end - 1), bucketUnit);
@@ -4352,7 +4401,11 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
     const timestamp = cursor.getTime();
     bucketIndexes.set(timestamp, buckets.length);
     buckets.push({ timestamp });
-    activeBabies.forEach((baby) => totals[baby.id].push(0));
+    activeBabies.forEach((baby) => {
+      BOTTLE_MILK_CHART_SOURCES.forEach((source) =>
+        totals[baby.id][source.id].push(0),
+      );
+    });
   }
 
   let total = 0;
@@ -4367,11 +4420,50 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
       chartBucketStart(timestamp, bucketUnit),
     );
     if (bucketIndex == null) continue;
-    totals[e.baby][bucketIndex] += amount;
+    const source = bottleMilkSource(e);
+    totals[e.baby][source][bucketIndex] += amount;
+    sourceTotals[source] += amount;
     total += amount;
   }
 
-  return { buckets, totals, total };
+  return { buckets, totals, sourceTotals, total };
+}
+
+function chartColourWithAlpha(colour, alpha) {
+  const rgb = hexToRgb(colour);
+  return rgb
+    ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+    : colour;
+}
+
+function bottleSourceChartBackground(colour, source) {
+  if (source === 'expressed') return colour;
+
+  const patternCanvas = document.createElement('canvas');
+  patternCanvas.width = 8;
+  patternCanvas.height = 8;
+  const context = patternCanvas.getContext('2d');
+  if (!context) return chartColourWithAlpha(colour, 0.4);
+
+  context.fillStyle = chartColourWithAlpha(colour, 0.18);
+  context.fillRect(0, 0, 8, 8);
+  context.strokeStyle = colour;
+  context.fillStyle = colour;
+
+  if (source === 'formula') {
+    context.lineWidth = 2;
+    [-4, 4, 12].forEach((offset) => {
+      context.beginPath();
+      context.moveTo(offset - 4, 8);
+      context.lineTo(offset + 4, 0);
+      context.stroke();
+    });
+  } else {
+    context.fillRect(2, 2, 2, 2);
+    context.fillRect(6, 6, 2, 2);
+  }
+
+  return context.createPattern(patternCanvas, 'repeat') || colour;
 }
 
 function activityBuckets(
@@ -5011,6 +5103,9 @@ function renderMilkIntakeTrend(activeBabies) {
   const emptyNote = model.total
     ? ''
     : '<p class="charts-milk-empty">No bottle feeds logged for selected babies in this range.</p>';
+  const chartSources = BOTTLE_MILK_CHART_SOURCES.filter(
+    (source) => source.id !== 'bottle' || model.sourceTotals.bottle > 0,
+  );
 
   return `
     <div class="charts-milk-plot">
@@ -5051,6 +5146,18 @@ function renderMilkIntakeTrend(activeBabies) {
           })
           .join('')}
       </div>
+      <div class="charts-milk-source-key" aria-label="Bottle milk source key">
+        ${chartSources
+          .map(
+            (source) => `
+          <span class="charts-milk-source">
+            <span class="charts-milk-source-swatch charts-milk-source-swatch--${source.id}" aria-hidden="true"></span>
+            <span>${escapeHtml(source.label)}</span>
+            <strong>${escapeHtml(model.sourceTotals[source.id] ? formatMilkAmount(model.sourceTotals[source.id]) : '—')}</strong>
+          </span>`,
+          )
+          .join('')}
+      </div>
       <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${intervalName} bottle intake chart"${milkChartStyle}>
         <div class="charts-milk-canvas-wrap">
           <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${intervalName} bottle intake by baby"></canvas>
@@ -5086,15 +5193,24 @@ function initMilkIntakeChart(activeBabies) {
       labels: model.buckets.map((bucket) =>
         formatChartBucketLabel(bucket.timestamp, range),
       ),
-      datasets: visibleBabies.map((baby) => ({
-        label: baby.name,
-        data: model.totals[baby.id],
-        backgroundColor: baby.colour,
-        borderColor: baby.colour,
-        borderRadius: 4,
-        borderSkipped: false,
-        maxBarThickness: 34,
-      })),
+      datasets: visibleBabies.flatMap((baby) =>
+        BOTTLE_MILK_CHART_SOURCES.filter(
+          (source) => model.sourceTotals[source.id] > 0,
+        ).map((source) => ({
+          label: `${baby.name} · ${source.label}`,
+          data: model.totals[baby.id][source.id],
+          stack: baby.id,
+          backgroundColor: bottleSourceChartBackground(
+            baby.colour,
+            source.id,
+          ),
+          borderColor: baby.colour,
+          borderWidth: source.id === 'expressed' ? 0 : 1,
+          borderRadius: 4,
+          borderSkipped: false,
+          maxBarThickness: 34,
+        })),
+      ),
     },
     options: {
       responsive: true,
@@ -5125,7 +5241,7 @@ function initMilkIntakeChart(activeBabies) {
       },
       scales: {
         x: {
-          stacked: false,
+          stacked: true,
           ticks: {
             color: chartTextColor,
             autoSkip: range.bucketUnit === 'hour' || range.days > 7,
@@ -5135,6 +5251,7 @@ function initMilkIntakeChart(activeBabies) {
           grid: { display: false },
         },
         y: {
+          stacked: true,
           beginAtZero: true,
           ticks: {
             color: chartTextColor,
@@ -5592,13 +5709,17 @@ function renderMilkAdditiveChoices() {
   const container = document.getElementById('milk-additive-select');
   const additives = milkAdditives();
   const shouldShow =
-    formState.type === 'milk' &&
-    formState.milkMethod === 'bottle' &&
-    additives.length > 0;
+    formState.type === 'milk' && formState.milkMethod === 'bottle';
   step.classList.toggle('hidden', !shouldShow);
 
   if (!shouldShow) {
     container.innerHTML = '';
+    return;
+  }
+
+  if (!additives.length) {
+    container.innerHTML =
+      '<p class="inline-empty">No milk additives configured. Add them in Settings.</p>';
     return;
   }
 
@@ -5652,11 +5773,13 @@ function renderMilkMethodButtons() {
   renderSelButtons(
     'milk-method-buttons',
     [
-      { id: 'bottle', name: '🍼 Bottle' },
-      { id: 'breast', name: 'Breast' },
+      { id: 'expressed', name: '🍼 Expressed' },
+      { id: 'formula', name: '🍼 Formula' },
+      { id: 'breast', name: '🤱 Breast' },
     ],
-    'milkMethod',
-    () => {
+    'milkSource',
+    (selectedId) => {
+      formState.milkMethod = selectedId === 'breast' ? 'breast' : 'bottle';
       formState.amount = '';
       formState.durationMinutes = '';
       resetMilkAdditiveSelection();
@@ -6090,8 +6213,9 @@ function updateSaveBtn() {
     formState.type !== 'express' || findUser(formState.user)?.canExpress;
   const milkOk =
     formState.type !== 'milk' ||
-    formState.milkMethod === 'bottle' ||
-    formState.milkMethod === 'breast';
+    formState.milkMethod === 'breast' ||
+    (formState.milkMethod === 'bottle' &&
+      BOTTLE_MILK_SOURCES.includes(formState.milkSource));
   const medOk =
     formState.type === 'milk' ||
     formState.type === 'weight' ||
@@ -6150,6 +6274,10 @@ async function saveEntry() {
           milkMethod: formState.milkMethod,
         }),
         ...(formState.type === 'milk' &&
+          formState.milkMethod === 'bottle' && {
+            milkSource: formState.milkSource,
+          }),
+        ...(formState.type === 'milk' &&
           formState.milkMethod === 'breast' && {
             durationMinutes: parseFloat(formState.durationMinutes),
           }),
@@ -6194,13 +6322,8 @@ async function saveEntry() {
           : formState.type === 'express'
             ? 'Expressed'
             : entry.milkMethod === 'breast'
-              ? 'Breast feed'
-              : [
-                  'Bottle',
-                  ...milkAdditiveNames(entry.milkAdditiveIds, {
-                    includeDeleted: true,
-                  }),
-                ].join(' + ');
+              ? 'Breast milk'
+              : milkFeedLabel(entry, { includeDeleted: true });
     amountStr =
       formState.type === 'weight'
         ? ` ${formatWeightLbOz(weightGrams(entry))}`
@@ -6285,9 +6408,6 @@ function renderLog() {
       const baby = findBaby(e.baby);
       const user = findUser(e.user);
       const med = e.medication ? findMed(e.medication) : null;
-      const additiveNames = milkAdditiveNames(e.milkAdditiveIds, {
-        includeDeleted: true,
-      });
       const emoji =
         e.type === 'medication'
           ? '💊'
@@ -6305,9 +6425,11 @@ function renderLog() {
               ? 'Weight'
               : e.type === 'express'
                 ? 'Expressed'
-                : e.milkMethod === 'breast'
-                  ? 'Breast feed'
-                  : escapeHtml(['Bottle', ...additiveNames].join(' + '));
+                : escapeHtml(
+                    milkFeedLabel(e, {
+                      includeDeleted: true,
+                    }),
+                  );
       const primary =
         e.type === 'poo'
           ? `<span class="log-val">${escapeHtml(baby ? baby.name : e.baby)}</span> had a moment`

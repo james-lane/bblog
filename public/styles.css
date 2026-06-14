@@ -654,7 +654,7 @@ main::before {
 
 #milk-method-buttons {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 #type-buttons .sel-btn {
@@ -1910,6 +1910,49 @@ main::before {
 
 .charts-milk-metrics::-webkit-scrollbar {
   display: none;
+}
+
+.charts-milk-source-key {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.charts-milk-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.charts-milk-source strong {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.charts-milk-source-swatch {
+  width: 14px;
+  height: 10px;
+  border: 1px solid var(--text-muted);
+  border-radius: 3px;
+  background: var(--text-muted);
+}
+
+.charts-milk-source-swatch--formula {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--text-muted) 3px 5px
+  );
+}
+
+.charts-milk-source-swatch--bottle {
+  background:
+    radial-gradient(circle, var(--text-muted) 0 1px, transparent 1.5px)
+    0 0 / 5px 5px;
 }
 
 .charts-milk-metric {
