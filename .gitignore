@@ -6,3 +6,8 @@ node_modules/
 .vercel/
 *.log
 .DS_Store
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example

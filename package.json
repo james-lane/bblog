@@ -8,7 +8,9 @@
     "dev": "node scripts/dev-server.mjs",
     "check": "node --check public/app.js && node --check public/sw.js && node --check api/vault.js && node --check api/notifications.js && node --check scripts/dev-server.mjs && node --check scripts/contrast-check.mjs && node --check scripts/bump-caches.mjs && node --check scripts/generate-vapid-keys.mjs && node scripts/contrast-check.mjs",
     "bump:caches": "node scripts/bump-caches.mjs",
-    "notifications:keys": "node scripts/generate-vapid-keys.mjs"
+    "notifications:keys": "node scripts/generate-vapid-keys.mjs",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "dependencies": {
     "@vercel/blob": "^2.3.3",
@@ -16,5 +18,8 @@
   },
   "engines": {
     "node": "24.x"
+  },
+  "devDependencies": {
+    "wrangler": "^4.107.0"
   }
 }
