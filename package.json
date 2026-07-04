@@ -14,6 +14,16 @@
     "@vercel/blob": "^2.3.3",
     "chart.js": "^4.5.1"
   },
+  "cloudflare": {
+    "bindings": {
+      "BBLOG_BUCKET": {
+        "description": "Choose or create a unique R2 bucket for this family's encrypted vault data. The bucket name can be anything unique in your Cloudflare account; keep the Worker binding name as `BBLOG_BUCKET`."
+      },
+      "BBLOG_FAMILY_ACCESS_KEY": {
+        "description": "Choose the family access key used to join this bblog instance. Every device joining this instance must enter the same key."
+      }
+    }
+  },
   "engines": {
     "node": "24.x"
   }

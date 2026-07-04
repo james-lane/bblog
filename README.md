@@ -54,6 +54,15 @@ The app targets Node.js 24 or newer through `package.json`. A fresh Vercel impor
 
 Vercel Blob storage is optional for a single-device vault and required for family sharing across devices. Vercel provides `BLOB_READ_WRITE_TOKEN` to the `/api/vault` function after the store is connected. Without it, the deployment accepts only the configured family key but stores the encrypted vault in that browser profile.
 
+Optional Vercel-only environment variables:
+
+```bash
+BLOB_READ_WRITE_TOKEN=
+BBLOG_VAPID_PUBLIC_KEY=
+BBLOG_VAPID_PRIVATE_KEY=
+BBLOG_VAPID_SUBJECT=mailto:you@example.com
+```
+
 The sync API uses Vercel Blob private storage through `@vercel/blob`. The API is intentionally small, so another host can replace `api/vault.js` with S3, R2, Supabase Storage, or another object store as long as it preserves the same `GET` and `PUT` JSON contract.
 
 To check whether a deployed instance can share data between devices, open `/api/vault?status=1` on that deployment. It should return `"instanceKeyConfigured":true` and `"syncConfigured":true`. If it returns `"mode":"setup-required"`, set `BBLOG_FAMILY_ACCESS_KEY`. If it returns `"mode":"local-only"`, the app can be used on one device, and Vercel Blob should be connected before inviting family members.
@@ -63,11 +72,13 @@ To check whether a deployed instance can share data between devices, open `/api/
 Use the Cloudflare deploy button above, or deploy manually with Wrangler:
 
 ```bash
-npx wrangler r2 bucket create bblog
+npx wrangler r2 bucket create bblog-vault
 npx wrangler deploy
 ```
 
-After the Worker is created, add `BBLOG_FAMILY_ACCESS_KEY` as a Worker secret or environment variable in Cloudflare, then redeploy. If you want to use a different R2 bucket name, update `bucket_name` in `wrangler.jsonc`; keep the binding name as `BBLOG_BUCKET`.
+During deploy-button setup, Cloudflare lets you customize resource names from `wrangler.jsonc`. Choose any R2 bucket name that is unique in your Cloudflare account; `bblog-vault` is only a default suggestion. Keep the Worker binding name as `BBLOG_BUCKET`, because the Worker reads `env.BBLOG_BUCKET`.
+
+After the Worker is created, add `BBLOG_FAMILY_ACCESS_KEY` as a Worker secret or environment variable in Cloudflare, then redeploy. If you use Wrangler manually and choose a different R2 bucket name, update `bucket_name` in `wrangler.jsonc`; keep the binding name as `BBLOG_BUCKET`.
 
 Cloudflare deployments serve the static app from `public/` and use the Worker in `worker/index.js` for `/api/vault`. The Cloudflare deployment stores encrypted vault snapshots in R2 under the same `bblog/v1/vaults/...` object keys as the Vercel Blob deployment, so the same encrypted vault export can be migrated between providers.
 
@@ -81,7 +92,11 @@ To migrate an existing Vercel vault export into Cloudflare R2, prepare the objec
 node scripts/prepare-r2-import.mjs bblog-vault-export.json
 ```
 
-The script writes files under `.local/r2-import/` and prints the `npx wrangler r2 object put ...` commands to upload them.
+The script writes files under `.local/r2-import/` and prints the `npx wrangler r2 object put ...` commands to upload them. If you chose a different R2 bucket name, pass it as the third argument:
+
+```bash
+node scripts/prepare-r2-import.mjs bblog-vault-export.json .local/r2-import your-bucket-name
+```
 
 ## API contract
 

@@ -11,7 +11,7 @@
   "r2_buckets": [
     {
       "binding": "BBLOG_BUCKET",
-      "bucket_name": "bblog"
+      "bucket_name": "bblog-vault"
     }
   ]
 }

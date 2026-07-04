@@ -2,11 +2,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 const DEFAULT_OUTPUT_DIR = '.local/r2-import';
+const DEFAULT_BUCKET_NAME = 'bblog-vault';
 const VAULT_PATH_RE = /^bblog\/v1\/vaults\/[a-f0-9]{32,64}(?:\/devices\/[a-z0-9_-]{8,96})?\.json$/;
 
 function usage() {
   console.error(
-    'Usage: node scripts/prepare-r2-import.mjs <bblog-vault-export.json> [output-dir]',
+    'Usage: node scripts/prepare-r2-import.mjs <bblog-vault-export.json> [output-dir] [bucket-name]',
   );
 }
 
@@ -38,6 +39,7 @@ function normalizeExport(value) {
 
 const inputPath = process.argv[2];
 const outputDir = resolve(process.argv[3] || DEFAULT_OUTPUT_DIR);
+const bucketName = process.argv[4] || DEFAULT_BUCKET_NAME;
 
 if (!inputPath) {
   usage();
@@ -76,6 +78,6 @@ console.log('');
 console.log('Upload with:');
 for (const item of written) {
   console.log(
-    `npx wrangler r2 object put ${shellQuote(`bblog/${item.pathname}`)} --file ${shellQuote(item.filePath)}`,
+    `npx wrangler r2 object put ${shellQuote(`${bucketName}/${item.pathname}`)} --file ${shellQuote(item.filePath)}`,
   );
 }
