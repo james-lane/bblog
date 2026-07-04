@@ -3,6 +3,7 @@
 bblog is a private baby log for families. Parents and carers can record feeds, nappies, medication, weights, and notes from their phones, then view the shared history and simple trends in one place. Each family deploys its own bblog instance and controls one encrypted family vault with a shared access key.
 
 [![Deploy with Vercel](https://vercel.com/button)][deploy-vercel]
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)][deploy-cloudflare]
 
 ## What is encrypted
 
@@ -57,6 +58,31 @@ The sync API uses Vercel Blob private storage through `@vercel/blob`. The API is
 
 To check whether a deployed instance can share data between devices, open `/api/vault?status=1` on that deployment. It should return `"instanceKeyConfigured":true` and `"syncConfigured":true`. If it returns `"mode":"setup-required"`, set `BBLOG_FAMILY_ACCESS_KEY`. If it returns `"mode":"local-only"`, the app can be used on one device, and Vercel Blob should be connected before inviting family members.
 
+## Deploy on Cloudflare
+
+Use the Cloudflare deploy button above, or deploy manually with Wrangler:
+
+```bash
+npx wrangler r2 bucket create bblog
+npx wrangler deploy
+```
+
+After the Worker is created, add `BBLOG_FAMILY_ACCESS_KEY` as a Worker secret or environment variable in Cloudflare, then redeploy. If you want to use a different R2 bucket name, update `bucket_name` in `wrangler.jsonc`; keep the binding name as `BBLOG_BUCKET`.
+
+Cloudflare deployments serve the static app from `public/` and use the Worker in `worker/index.js` for `/api/vault`. The Cloudflare deployment stores encrypted vault snapshots in R2 under the same `bblog/v1/vaults/...` object keys as the Vercel Blob deployment, so the same encrypted vault export can be migrated between providers.
+
+To check whether a Cloudflare deployment can share data between devices, open `/api/vault?status=1` on that deployment. It should return `"storage":"cloudflare-r2"` and `"syncConfigured":true`.
+
+Closed-app Web Push medication reminders are currently Vercel-only. Cloudflare deployments still show in-app medication reminders while bblog is open.
+
+To migrate an existing Vercel vault export into Cloudflare R2, prepare the object files locally:
+
+```bash
+node scripts/prepare-r2-import.mjs bblog-vault-export.json
+```
+
+The script writes files under `.local/r2-import/` and prints the `npx wrangler r2 object put ...` commands to upload them.
+
 ## API contract
 
 `GET /api/vault?familyId=<hex>` returns:
@@ -96,3 +122,4 @@ Assign medications to babies in Settings and set a repeat interval to show due-s
 While bblog is open, reminders run locally. When deployed with Vercel Blob, VAPID keys, and the included `/api/notifications` cron, installed PWAs can also receive a generic Web Push notification while closed, including on iOS. The server stores push subscriptions, wake-up times, and hashed reminder ids only; baby names, medication names, doses, and due times remain in the encrypted device vault.
 
 [deploy-vercel]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog&project-name=bblog&repository-name=bblog&env=BBLOG_FAMILY_ACCESS_KEY&envDescription=Required%3A+choose+a+long+family+access+key+for+this+one-vault+bblog+instance.+Add+Vercel+Blob+after+deploy+only+if+you+want+family+sharing+across+devices.&envLink=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog%23deploy-on-vercel
+[deploy-cloudflare]: https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fjames-lane%2Fbblog
