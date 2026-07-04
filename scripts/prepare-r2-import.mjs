@@ -78,6 +78,6 @@ console.log('');
 console.log('Upload with:');
 for (const item of written) {
   console.log(
-    `npx wrangler r2 object put ${shellQuote(`${bucketName}/${item.pathname}`)} --file ${shellQuote(item.filePath)}`,
+    `npx wrangler r2 object put ${shellQuote(`${bucketName}/${item.pathname}`)} --file ${shellQuote(item.filePath)} --remote`,
   );
 }

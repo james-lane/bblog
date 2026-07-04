@@ -4,5 +4,7 @@
 .local/
 node_modules/
 .vercel/
+.wrangler/
+*-vault-export.json
 *.log
 .DS_Store

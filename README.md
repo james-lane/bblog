@@ -69,22 +69,28 @@ To check whether a deployed instance can share data between devices, open `/api/
 
 ## Deploy on Cloudflare
 
-Use the Cloudflare deploy button above, or deploy manually with Wrangler:
+Use the Cloudflare deploy button above. On the setup screen:
+
+1. Choose any Worker name you like, such as `bblog`.
+2. Choose a long family access key. This is the key every parent/carer will enter in the app.
+3. Choose an R2 bucket name for the encrypted family vault. Try something unique, such as `bblog-smith-vault` or `bblog-2026-vault`.
+4. Leave the R2 binding name as `BBLOG_BUCKET`.
+5. Deploy.
+
+If Cloudflare says a bucket name is already taken, add your name, initials, or a few numbers and try again. The exact bucket name does not matter; the binding name must stay `BBLOG_BUCKET`.
+
+After deployment, open the new app URL and join with the same family access key. To check that sharing between devices is ready, open `/api/vault?status=1` on that deployment. It should show `"storage":"cloudflare-r2"` and `"syncConfigured":true`.
+
+Closed-app Web Push medication reminders are currently Vercel-only. Cloudflare deployments still show in-app medication reminders while bblog is open.
+
+Manual Cloudflare deployment with Wrangler:
 
 ```bash
 npx wrangler r2 bucket create bblog-vault
 npx wrangler deploy
 ```
 
-During deploy-button setup, Cloudflare lets you customize resource names from `wrangler.jsonc`. Choose any R2 bucket name that is unique in your Cloudflare account; `bblog-vault` is only a default suggestion. Keep the Worker binding name as `BBLOG_BUCKET`, because the Worker reads `env.BBLOG_BUCKET`.
-
-After the Worker is created, add `BBLOG_FAMILY_ACCESS_KEY` as a Worker secret or environment variable in Cloudflare, then redeploy. If you use Wrangler manually and choose a different R2 bucket name, update `bucket_name` in `wrangler.jsonc`; keep the binding name as `BBLOG_BUCKET`.
-
-Cloudflare deployments serve the static app from `public/` and use the Worker in `worker/index.js` for `/api/vault`. The Cloudflare deployment stores encrypted vault snapshots in R2 under the same `bblog/v1/vaults/...` object keys as the Vercel Blob deployment, so the same encrypted vault export can be migrated between providers.
-
-To check whether a Cloudflare deployment can share data between devices, open `/api/vault?status=1` on that deployment. It should return `"storage":"cloudflare-r2"` and `"syncConfigured":true`.
-
-Closed-app Web Push medication reminders are currently Vercel-only. Cloudflare deployments still show in-app medication reminders while bblog is open.
+If you use a different R2 bucket name with Wrangler, update `bucket_name` in `wrangler.jsonc`; keep the binding name as `BBLOG_BUCKET`.
 
 To migrate an existing Vercel vault export into Cloudflare R2, prepare the object files locally:
 
@@ -92,7 +98,7 @@ To migrate an existing Vercel vault export into Cloudflare R2, prepare the objec
 node scripts/prepare-r2-import.mjs bblog-vault-export.json
 ```
 
-The script writes files under `.local/r2-import/` and prints the `npx wrangler r2 object put ...` commands to upload them. If you chose a different R2 bucket name, pass it as the third argument:
+The script writes files under `.local/r2-import/` and prints the `npx wrangler r2 object put ... --remote` commands to upload them to Cloudflare. Keep `--remote`; without it, Wrangler uploads to a local development bucket. If you chose a different R2 bucket name, pass it as the third argument:
 
 ```bash
 node scripts/prepare-r2-import.mjs bblog-vault-export.json .local/r2-import your-bucket-name
