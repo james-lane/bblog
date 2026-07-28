@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v141';
+const APP_VERSION = 'bblog-v142';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -5562,7 +5562,11 @@ function wireMilkIntakeChartInteractions(
   };
 
   const canPanChart = () =>
-    Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 1);
+    Boolean(
+      scroll &&
+        !scroll.classList.contains('charts-milk-scroll--rail-only') &&
+        scroll.scrollWidth > scroll.clientWidth + 1,
+    );
 
   const rememberClickStart = (event) => {
     if (!Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY))
@@ -5836,7 +5840,7 @@ function renderMilkIntakeTrend(activeBabies) {
           .join('')}
       </div>
       <div class="charts-milk-chart-shell">
-        <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${intervalName} bottle intake chart"${milkChartStyle}>
+        <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense charts-milk-scroll--rail-only' : ''}" aria-label="${intervalName} bottle intake chart"${milkChartStyle}>
           <div class="charts-milk-canvas-wrap">
             <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${intervalName} bottle intake by baby"></canvas>
           </div>

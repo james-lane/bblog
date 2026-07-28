@@ -2205,6 +2205,11 @@ main::before {
   width: max(100%, var(--milk-chart-min-width, 760px));
 }
 
+.charts-milk-scroll--rail-only {
+  overflow-x: hidden;
+  overscroll-behavior-x: contain;
+}
+
 .charts-milk-canvas {
   display: block;
   width: 100%;
