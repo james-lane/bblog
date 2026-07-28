@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v139';
+const APP_VERSION = 'bblog-v141';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -5590,6 +5590,17 @@ function wireMilkIntakeChartInteractions(
       clearAfterMs: MILK_CHART_CLICK_DETAIL_MS,
     });
   });
+
+  const preventNativeHoldMenu = (event) => {
+    event.preventDefault();
+  };
+  [canvas.closest('.charts-milk-chart-shell'), canvas]
+    .filter(Boolean)
+    .forEach((surface) => {
+      surface.addEventListener('contextmenu', preventNativeHoldMenu);
+      surface.addEventListener('selectstart', preventNativeHoldMenu);
+      surface.addEventListener('dragstart', preventNativeHoldMenu);
+    });
 
   canvas.addEventListener('pointerdown', (event) => {
     rememberClickStart(event);
