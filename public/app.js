@@ -1,7 +1,7 @@
 const DB_NAME = 'bblog-v1';
 const DB_STORE = 'kv';
 const DATA_KEY = 'vault-data';
-const APP_VERSION = 'bblog-v135';
+const APP_VERSION = 'bblog-v139';
 const SESSION_KEY = 'vault-session';
 const DEVICE_ID_KEY = 'device-id';
 const KDF_ITERATIONS = 210000;
@@ -109,6 +109,10 @@ const MILK_STATS_PERIOD_LABELS = {
   '1m': { previous: 'Previous month', next: 'Next month' },
 };
 const MILK_STATS_SWIPE_THRESHOLD_PX = 48;
+const MILK_CHART_CLICK_DETAIL_MS = 3500;
+const MILK_CHART_LONG_PRESS_MS = 360;
+const MILK_CHART_HOLD_MOVE_TOLERANCE_PX = 10;
+const MILK_CHART_RAIL_STEPS = 1000;
 const CHART_PAGES = [
   { id: 'weight', name: 'Weight trend' },
   { id: 'milk', name: 'Bottle intake' },
@@ -1710,6 +1714,9 @@ let keyCache = null;
 let deferredInstallPrompt = null;
 let _installSuggestionDismissed = false;
 let _milkChartSwipeStart = null;
+let _milkChartHoldTimer = null;
+let _milkChartDetailTimer = null;
+let _milkChartSuppressNextClick = false;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -3616,6 +3623,12 @@ function dateInputValue(timestamp = Date.now()) {
   return `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function monthInputValue(timestamp = Date.now()) {
+  const d = new Date(timestamp);
+  if (!Number.isFinite(d.getTime())) return '';
+  return `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function dateInputParts(value) {
   const normalized = normalizeDateOnly(value);
   if (!normalized) return null;
@@ -4146,6 +4159,45 @@ function shiftMilkStatsPeriod(delta) {
   return true;
 }
 
+function setMilkStatsPeriodFromInput(value, now = Date.now()) {
+  const unit = MILK_STATS_PERIOD_UNITS[_milkStatsRange];
+  if (!unit || !value) return false;
+
+  let offset = null;
+  if (unit === 'month') {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    if (!Number.isInteger(year) || month < 0 || month > 11) return false;
+    const current = new Date(now);
+    offset =
+      (year - current.getFullYear()) * 12 + month - current.getMonth();
+  } else {
+    const selected = dateInputStartMs(value);
+    if (selected == null) return false;
+    if (unit === 'day') {
+      offset = Math.round(
+        (localDayDate(selected).getTime() - localDayDate(now).getTime()) /
+          86400000,
+      );
+    } else if (unit === 'week') {
+      offset = Math.round(
+        (startOfLocalWeek(selected).getTime() -
+          startOfLocalWeek(now).getTime()) /
+          604800000,
+      );
+    }
+  }
+
+  if (!Number.isInteger(offset)) return false;
+  const next = Math.min(0, offset);
+  const current = _milkStatsPeriodOffsets[_milkStatsRange] || 0;
+  if (next === current) return false;
+  _milkStatsPeriodOffsets[_milkStatsRange] = next;
+  return true;
+}
+
 function presetStatsRangeBounds(option, now = Date.now()) {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
@@ -4591,6 +4643,9 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
       ),
     ]),
   );
+  const feedCounts = Object.fromEntries(
+    activeBabies.map((baby) => [baby.id, []]),
+  );
   const sourceTotals = Object.fromEntries(
     BOTTLE_MILK_CHART_SOURCES.map((source) => [source.id, 0]),
   );
@@ -4606,6 +4661,7 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
     bucketIndexes.set(timestamp, buckets.length);
     buckets.push({ timestamp });
     activeBabies.forEach((baby) => {
+      feedCounts[baby.id].push(0);
       BOTTLE_MILK_CHART_SOURCES.forEach((source) =>
         totals[baby.id][source.id].push(0),
       );
@@ -4626,11 +4682,12 @@ function milkIntakeBuckets(start, end, activeBabies, bucketUnit = 'day') {
     if (bucketIndex == null) continue;
     const source = bottleMilkSource(e);
     totals[e.baby][source][bucketIndex] += amount;
+    feedCounts[e.baby][bucketIndex] += 1;
     sourceTotals[source] += amount;
     total += amount;
   }
 
-  return { buckets, totals, sourceTotals, total };
+  return { buckets, totals, feedCounts, sourceTotals, total };
 }
 
 function chartColourWithAlpha(colour, alpha) {
@@ -5132,6 +5189,9 @@ function destroyWeightTrendChart() {
 }
 
 function destroyMilkIntakeChart() {
+  clearMilkBucketDetails();
+  clearTimeout(_milkChartHoldTimer);
+  _milkChartHoldTimer = null;
   if (milkIntakeChart) {
     milkIntakeChart.destroy();
     milkIntakeChart = null;
@@ -5284,6 +5344,382 @@ function initWeightTrendChart(activeBabies) {
   wireWeightChartScrubber(canvas, weightTrendChart, model);
 }
 
+function renderMilkMetricValues(items) {
+  return `
+            <span class="charts-milk-metric-values">
+              ${items
+                .map(
+                  (item) =>
+                    `<span><small>${escapeHtml(item.label)}</small>${escapeHtml(item.value)}</span>`,
+                )
+                .join('')}
+            </span>`;
+}
+
+function updateMilkMetricCardValues(card, items) {
+  const values = card?.querySelector('.charts-milk-metric-values');
+  if (values) values.outerHTML = renderMilkMetricValues(items);
+}
+
+function restoreMilkMetricCards() {
+  document.querySelectorAll('[data-milk-chart-baby]').forEach((card) => {
+    card.classList.remove('charts-milk-metric--bucket');
+    const feeds = card.querySelector('.charts-milk-metric-feeds');
+    if (feeds) feeds.textContent = card.dataset.milkChartDefaultFeeds || '';
+    updateMilkMetricCardValues(card, [
+      {
+        label: 'Avg feed',
+        value: card.dataset.milkChartDefaultAvgFeed || '—',
+      },
+      {
+        label: 'Avg gap',
+        value: card.dataset.milkChartDefaultAvgGap || '—',
+      },
+    ]);
+  });
+}
+
+function milkBucketAmount(model, babyId, bucketIndex) {
+  const totals = model?.totals?.[babyId];
+  if (!totals) return null;
+  return BOTTLE_MILK_CHART_SOURCES.reduce(
+    (sum, source) => sum + Number(totals[source.id]?.[bucketIndex] || 0),
+    0,
+  );
+}
+
+function setMilkSelectionLine(bucketIndex) {
+  const options = milkIntakeChart?.options?.plugins?.milkSelectionLine;
+  if (!options) return;
+  options.index = Number.isInteger(bucketIndex) ? bucketIndex : null;
+  milkIntakeChart.update('none');
+}
+
+function clearMilkBucketDetails() {
+  clearTimeout(_milkChartDetailTimer);
+  _milkChartDetailTimer = null;
+  restoreMilkMetricCards();
+  setMilkSelectionLine(null);
+}
+
+function showMilkBucketDetails(
+  model,
+  range,
+  activeBabies,
+  bucketIndex,
+  { clearAfterMs = 0 } = {},
+) {
+  const bucket = model?.buckets?.[bucketIndex];
+  if (!bucket) return;
+
+  clearTimeout(_milkChartDetailTimer);
+  _milkChartDetailTimer = null;
+  restoreMilkMetricCards();
+  setMilkSelectionLine(bucketIndex);
+
+  const bucketLabel = formatChartBucketLabel(bucket.timestamp, range);
+  activeBabies.forEach((baby) => {
+    const card = Array.from(
+      document.querySelectorAll('[data-milk-chart-baby]'),
+    ).find((item) => item.dataset.milkChartBaby === baby.id);
+    if (!card || !model.totals?.[baby.id]) return;
+    const amount = milkBucketAmount(model, baby.id, bucketIndex);
+    const feedCount = model.feedCounts?.[baby.id]?.[bucketIndex] || 0;
+    const feeds = card.querySelector('.charts-milk-metric-feeds');
+    if (feeds) feeds.textContent = bucketLabel;
+    card.classList.add('charts-milk-metric--bucket');
+    updateMilkMetricCardValues(card, [
+      { label: 'Total', value: amount > 0 ? formatMilkAmount(amount) : '—' },
+      { label: 'Feeds', value: String(feedCount) },
+    ]);
+  });
+
+  if (clearAfterMs > 0) {
+    _milkChartDetailTimer = setTimeout(
+      clearMilkBucketDetails,
+      clearAfterMs,
+    );
+  }
+}
+
+function milkChartBucketIndexFromPointer(chart, event) {
+  const xScale = chart?.scales?.x;
+  if (!xScale || !chart?.canvas || !Number.isFinite(event?.clientX)) return null;
+  const rect = chart.canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const { chartArea } = chart;
+  if (
+    x < chartArea.left ||
+    x > chartArea.right ||
+    y < chartArea.top ||
+    y > chartArea.bottom
+  )
+    return null;
+  const index = Math.round(Number(xScale.getValueForPixel(x)));
+  const maxIndex = chart.data?.labels?.length ? chart.data.labels.length - 1 : -1;
+  if (!Number.isInteger(index) || index < 0 || index > maxIndex) return null;
+  return index;
+}
+
+function suppressNextMilkChartClick() {
+  _milkChartSuppressNextClick = true;
+  setTimeout(() => {
+    _milkChartSuppressNextClick = false;
+  }, 450);
+}
+
+function wireMilkChartScrollRail(scroll) {
+  const rail = document.querySelector('[data-milk-chart-scroll-rail]');
+  if (!scroll || !rail) return;
+  let activePointerId = null;
+
+  const maxScroll = () => Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
+  const clampRailValue = (value) =>
+    Math.min(MILK_CHART_RAIL_STEPS, Math.max(0, value));
+  const syncRail = () => {
+    const max = maxScroll();
+    rail.disabled = max <= 0;
+    rail.value = max
+      ? String(Math.round((scroll.scrollLeft / max) * MILK_CHART_RAIL_STEPS))
+      : '0';
+  };
+  const setScrollRatio = (ratio) => {
+    const max = maxScroll();
+    if (!max) return;
+    const clampedRatio = Math.min(1, Math.max(0, ratio));
+    rail.value = String(Math.round(clampedRatio * MILK_CHART_RAIL_STEPS));
+    scroll.scrollLeft = max * clampedRatio;
+  };
+  const setScrollFromPointer = (event) => {
+    const rect = rail.getBoundingClientRect();
+    if (!rect.width || !Number.isFinite(event?.clientX)) return;
+    setScrollRatio((event.clientX - rect.left) / rect.width);
+  };
+
+  rail.addEventListener('input', () => {
+    const max = maxScroll();
+    if (!max) return;
+    const ratio =
+      clampRailValue(Number(rail.value) || 0) / MILK_CHART_RAIL_STEPS;
+    scroll.scrollLeft = max * ratio;
+  });
+  rail.addEventListener('pointerdown', (event) => {
+    if (event.isPrimary === false) return;
+    activePointerId = event.pointerId;
+    rail.setPointerCapture?.(event.pointerId);
+    setScrollFromPointer(event);
+    event.preventDefault();
+  });
+  rail.addEventListener('pointermove', (event) => {
+    if (activePointerId !== event.pointerId) return;
+    setScrollFromPointer(event);
+    event.preventDefault();
+  });
+  const finishRailPointer = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    activePointerId = null;
+    rail.releasePointerCapture?.(event.pointerId);
+  };
+  rail.addEventListener('pointerup', finishRailPointer);
+  rail.addEventListener('pointercancel', finishRailPointer);
+  rail.addEventListener('keydown', (event) => {
+    const current = clampRailValue(Number(rail.value) || 0);
+    const keySteps = {
+      ArrowLeft: -40,
+      ArrowDown: -40,
+      ArrowRight: 40,
+      ArrowUp: 40,
+      PageDown: -140,
+      PageUp: 140,
+      Home: -current,
+      End: MILK_CHART_RAIL_STEPS - current,
+    };
+    if (!(event.key in keySteps)) return;
+    event.preventDefault();
+    setScrollRatio((current + keySteps[event.key]) / MILK_CHART_RAIL_STEPS);
+  });
+  scroll.addEventListener('scroll', syncRail, { passive: true });
+  syncRail();
+}
+
+function wireMilkIntakeChartInteractions(
+  canvas,
+  chart,
+  model,
+  range,
+  activeBabies,
+) {
+  let holdState = null;
+  let panState = null;
+  let clickStart = null;
+  const scroll = canvas.closest('.charts-milk-scroll');
+
+  const cancelHoldTimer = () => {
+    clearTimeout(_milkChartHoldTimer);
+    _milkChartHoldTimer = null;
+  };
+
+  const canPanChart = () =>
+    Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 1);
+
+  const rememberClickStart = (event) => {
+    if (!Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY))
+      return;
+    clickStart = { x: event.clientX, y: event.clientY };
+  };
+
+  const didClickMove = (event) => {
+    if (!clickStart) return false;
+    const dx = event.clientX - clickStart.x;
+    const dy = event.clientY - clickStart.y;
+    clickStart = null;
+    return Math.hypot(dx, dy) > MILK_CHART_HOLD_MOVE_TOLERANCE_PX;
+  };
+
+  canvas.addEventListener('click', (event) => {
+    const movedSincePress = didClickMove(event);
+    if (_milkChartSuppressNextClick || movedSincePress) {
+      _milkChartSuppressNextClick = false;
+      return;
+    }
+    const bucketIndex = milkChartBucketIndexFromPointer(chart, event);
+    if (bucketIndex == null) return;
+    showMilkBucketDetails(model, range, activeBabies, bucketIndex, {
+      clearAfterMs: MILK_CHART_CLICK_DETAIL_MS,
+    });
+  });
+
+  canvas.addEventListener('pointerdown', (event) => {
+    rememberClickStart(event);
+    if (event.pointerType === 'mouse') return;
+    if (event.isPrimary === false) return;
+    panState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: scroll?.scrollLeft || 0,
+      scrolling: false,
+    };
+    const bucketIndex = milkChartBucketIndexFromPointer(chart, event);
+    if (bucketIndex == null) return;
+    cancelHoldTimer();
+    holdState = {
+      active: false,
+      bucketIndex,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    _milkChartHoldTimer = setTimeout(() => {
+      if (!holdState) return;
+      holdState.active = true;
+      _milkChartSwipeStart = null;
+      suppressNextMilkChartClick();
+      canvas.setPointerCapture?.(event.pointerId);
+      panState = null;
+      showMilkBucketDetails(model, range, activeBabies, bucketIndex);
+    }, MILK_CHART_LONG_PRESS_MS);
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (holdState?.active && holdState.pointerId === event.pointerId) {
+      const bucketIndex = milkChartBucketIndexFromPointer(chart, event);
+      if (bucketIndex != null && bucketIndex !== holdState.bucketIndex) {
+        holdState.bucketIndex = bucketIndex;
+        showMilkBucketDetails(model, range, activeBabies, bucketIndex);
+      }
+      event.preventDefault();
+      return;
+    }
+
+    if (!panState || panState.pointerId !== event.pointerId) return;
+    const dx = event.clientX - panState.startX;
+    const dy = event.clientY - panState.startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (
+      absX <= MILK_CHART_HOLD_MOVE_TOLERANCE_PX &&
+      absY <= MILK_CHART_HOLD_MOVE_TOLERANCE_PX
+    )
+      return;
+
+    if (holdState?.pointerId === event.pointerId) {
+      cancelHoldTimer();
+      holdState = null;
+    }
+
+    if (absX > absY * 1.15 && canPanChart()) {
+      if (!panState.scrolling) {
+        panState.scrolling = true;
+        suppressNextMilkChartClick();
+        canvas.setPointerCapture?.(event.pointerId);
+      }
+      scroll.scrollLeft = panState.startScrollLeft - dx;
+      event.preventDefault();
+    }
+  });
+
+  canvas.addEventListener('mousedown', rememberClickStart);
+  canvas.addEventListener(
+    'touchstart',
+    (event) => {
+      const touch = event.touches?.[0];
+      if (touch) rememberClickStart(touch);
+    },
+    { passive: true },
+  );
+
+  const finishPointerGesture = (event) => {
+    const activeHold =
+      holdState?.pointerId === event.pointerId ? holdState : null;
+    const activePan = panState?.pointerId === event.pointerId ? panState : null;
+
+    if (!activeHold && !activePan) return;
+    const shouldClearDetails = Boolean(activeHold?.active);
+    const shouldSuppressClick = shouldClearDetails || activePan?.scrolling;
+    if (activeHold) {
+      cancelHoldTimer();
+      holdState = null;
+    }
+    if (activePan) panState = null;
+    canvas.releasePointerCapture?.(event.pointerId);
+    if (shouldSuppressClick) suppressNextMilkChartClick();
+    if (shouldClearDetails) clearMilkBucketDetails();
+  };
+
+  canvas.addEventListener('pointerup', finishPointerGesture);
+  canvas.addEventListener('pointercancel', finishPointerGesture);
+}
+
+const milkSelectionLinePlugin = {
+  id: 'milkSelectionLine',
+  afterDatasetsDraw(chart, args, options) {
+    const bucketIndex = Number(options?.index);
+    const xScale = chart.scales?.x;
+    if (!Number.isInteger(bucketIndex) || !xScale) return;
+
+    const x = xScale.getPixelForValue(bucketIndex);
+    const { chartArea, ctx } = chart;
+    if (!Number.isFinite(x) || x < chartArea.left || x > chartArea.right)
+      return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = options?.color || '#666';
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.fillStyle = options?.color || '#666';
+    ctx.beginPath();
+    ctx.arc(x, chartArea.top + 7, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  },
+};
+
 function renderMilkIntakeTrend(activeBabies) {
   const range = selectedMilkStatsRangeBounds();
   const visibleBabies = visibleMilkChartBabies(activeBabies);
@@ -5304,18 +5740,32 @@ function renderMilkIntakeTrend(activeBabies) {
     : '<p class="charts-milk-empty charts-milk-empty--plot" role="status">No bottle feeds logged for selected babies in this range.</p>';
   const chartSources = BOTTLE_MILK_CHART_SOURCES;
   const periodLabels = MILK_STATS_PERIOD_LABELS[range.id];
+  const periodPickerType = range.periodUnit === 'month' ? 'month' : 'date';
+  const periodPickerValue =
+    periodPickerType === 'month'
+      ? monthInputValue(range.start)
+      : dateInputValue(range.start);
+  const periodPickerMax =
+    periodPickerType === 'month' ? monthInputValue() : dateInputValue();
+  const periodPickerLabel = `Choose ${milkStatsRangeName(
+    milkStatsRangeById(range.id),
+  ).toLowerCase()}`;
   const periodNav =
     range.canNavigate && periodLabels
       ? `
       <div class="charts-milk-period" data-milk-chart-swipe="true" aria-live="polite">
         <button class="charts-milk-period-btn" type="button" data-milk-chart-shift="-1" aria-label="${escapeHtml(periodLabels.previous)}" title="${escapeHtml(periodLabels.previous)}">&#x2039;</button>
-        <div class="charts-milk-period-copy">
+        <label class="charts-milk-period-copy">
           <span class="charts-milk-period-kicker">${escapeHtml(milkStatsRangeName(milkStatsRangeById(range.id)))}</span>
           <strong class="charts-milk-period-title">${escapeHtml(range.summary)}</strong>
-        </div>
+          <input class="charts-milk-period-input" type="${periodPickerType}" value="${escapeHtml(periodPickerValue)}" max="${escapeHtml(periodPickerMax)}" data-milk-chart-period-input="true" aria-label="${escapeHtml(periodPickerLabel)}" autocomplete="off" />
+        </label>
         <button class="charts-milk-period-btn" type="button" data-milk-chart-shift="1" aria-label="${escapeHtml(periodLabels.next)}" title="${escapeHtml(periodLabels.next)}" ${range.canShiftForward ? '' : 'disabled'}>&#x203a;</button>
       </div>`
       : '';
+  const scrollRail = denseMilkChart
+    ? `<input class="charts-milk-scroll-rail" type="range" min="0" max="${MILK_CHART_RAIL_STEPS}" value="${MILK_CHART_RAIL_STEPS}" step="1" data-milk-chart-scroll-rail="true" aria-label="Bottle intake chart position" />`
+    : '';
 
   return `
     <div class="charts-milk-plot">
@@ -5341,18 +5791,23 @@ function renderMilkIntakeTrend(activeBabies) {
           .map((baby) => {
             const stat = intakeStats[baby.id] || {};
             const feeds = stat.feeds || 0;
+            const feedLabel = feeds === 1 ? '1 feed' : `${feeds} feeds`;
+            const avgFeedText =
+              stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—';
+            const avgGapText =
+              stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—';
             const isVisible = !_hiddenMilkChartBabyIds.has(baby.id);
             const cannotHide = isVisible && visibleBabies.length <= 1;
             return `
-          <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-milk-chart-baby="${escapeHtml(baby.id)}" style="--baby-colour:${baby.colour}" ${cannotHide ? 'disabled title="At least one baby must remain visible"' : ''}>
+          <button class="charts-milk-metric" type="button" aria-pressed="${isVisible}" data-milk-chart-baby="${escapeHtml(baby.id)}" data-milk-chart-default-feeds="${escapeHtml(feedLabel)}" data-milk-chart-default-avg-feed="${escapeHtml(avgFeedText)}" data-milk-chart-default-avg-gap="${escapeHtml(avgGapText)}" style="--baby-colour:${baby.colour}" ${cannotHide ? 'disabled title="At least one baby must remain visible"' : ''}>
             <span class="charts-milk-metric-head">
               <span class="charts-milk-metric-name"><span class="charts-milk-baby-swatch" aria-hidden="true"></span>${escapeHtml(baby.name)}</span>
-              <span class="charts-milk-metric-feeds">${escapeHtml(feeds === 1 ? '1 feed' : `${feeds} feeds`)}</span>
+              <span class="charts-milk-metric-feeds">${escapeHtml(feedLabel)}</span>
             </span>
-            <span class="charts-milk-metric-values">
-              <span><small>Avg feed</small>${escapeHtml(stat.avgFeed != null ? formatMilkAmount(stat.avgFeed) : '—')}</span>
-              <span><small>Avg gap</small>${escapeHtml(stat.avgGapMs != null ? formatDuration(stat.avgGapMs) : '—')}</span>
-            </span>
+            ${renderMilkMetricValues([
+              { label: 'Avg feed', value: avgFeedText },
+              { label: 'Avg gap', value: avgGapText },
+            ])}
           </button>`;
           })
           .join('')}
@@ -5370,13 +5825,14 @@ function renderMilkIntakeTrend(activeBabies) {
           .join('')}
       </div>
       <div class="charts-milk-chart-shell">
-        <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${intervalName} bottle intake chart" data-milk-chart-swipe="true"${milkChartStyle}>
+        <div class="charts-milk-scroll ${denseMilkChart ? 'charts-milk-scroll--dense' : ''}" aria-label="${intervalName} bottle intake chart"${milkChartStyle}>
           <div class="charts-milk-canvas-wrap">
             <canvas id="charts-milk-canvas" class="charts-milk-canvas" width="720" height="360" aria-label="${intervalName} bottle intake by baby"></canvas>
           </div>
         </div>
         ${emptyOverlay}
       </div>
+      ${scrollRail}
     </div>`;
 }
 
@@ -5399,9 +5855,11 @@ function initMilkIntakeChart(activeBabies) {
     'rgba(142, 142, 147, 0.22)';
   const chartTextColor =
     rootStyles.getPropertyValue('--text-muted').trim() || '#8e8e93';
+  const accentColor = rootStyles.getPropertyValue('--accent').trim() || '#666';
 
   milkIntakeChart = new Chart(canvas, {
     type: 'bar',
+    plugins: [milkSelectionLinePlugin],
     data: {
       labels: model.buckets.map((bucket) =>
         formatChartBucketLabel(bucket.timestamp, range),
@@ -5428,29 +5886,12 @@ function initMilkIntakeChart(activeBabies) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      events: [],
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            title: (items) => {
-              const bucket = model.buckets[items[0]?.dataIndex];
-              if (!bucket) return '';
-              return range.bucketUnit === 'hour'
-                ? formatMilkChartHour(bucket.timestamp, true)
-                : formatMilkChartDate(bucket.timestamp);
-            },
-            label: (context) =>
-              `${context.dataset.label}: ${Math.round(context.parsed.y).toLocaleString()} ml`,
-            footer: (items) => {
-              const total = items.reduce(
-                (sum, item) => sum + Number(item.parsed.y || 0),
-                0,
-              );
-              return `Total: ${Math.round(total).toLocaleString()} ml`;
-            },
-          },
-        },
+        tooltip: { enabled: false },
+        milkSelectionLine: { index: null, color: accentColor },
       },
       scales: {
         x: {
@@ -5477,8 +5918,17 @@ function initMilkIntakeChart(activeBabies) {
       },
     },
   });
-  const scroll = canvas.closest('.charts-milk-scroll--dense');
-  if (scroll) scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+  const scroll = canvas.closest('.charts-milk-scroll');
+  if (scroll?.classList.contains('charts-milk-scroll--dense'))
+    scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+  wireMilkChartScrollRail(scroll);
+  wireMilkIntakeChartInteractions(
+    canvas,
+    milkIntakeChart,
+    model,
+    range,
+    activeBabies,
+  );
 }
 
 function milkChartSwipeTarget(target) {
@@ -5491,8 +5941,10 @@ function handleMilkChartSwipeDelta(dx, dy) {
     absX < MILK_STATS_SWIPE_THRESHOLD_PX ||
     absX < Math.abs(dy) * 1.4
   )
-    return;
-  if (shiftMilkStatsPeriod(dx < 0 ? 1 : -1)) renderCharts();
+    return false;
+  if (!shiftMilkStatsPeriod(dx < 0 ? 1 : -1)) return false;
+  renderCharts();
+  return true;
 }
 
 function startMilkChartSwipe(event) {
@@ -5514,7 +5966,11 @@ function finishMilkChartSwipe(event) {
   _milkChartSwipeStart = null;
   if (start?.type !== 'pointer') return;
   if (!start || start.pointerId !== event.pointerId) return;
-  handleMilkChartSwipeDelta(event.clientX - start.x, event.clientY - start.y);
+  const dx = event.clientX - start.x;
+  const dy = event.clientY - start.y;
+  if (Math.hypot(dx, dy) > MILK_CHART_HOLD_MOVE_TOLERANCE_PX)
+    suppressNextMilkChartClick();
+  handleMilkChartSwipeDelta(dx, dy);
 }
 
 function cancelMilkChartPointerSwipe(event) {
@@ -5544,7 +6000,11 @@ function finishMilkChartTouchSwipe(event) {
       (item) => item.identifier === start.pointerId,
     ) || event.changedTouches?.[0];
   if (!touch) return;
-  handleMilkChartSwipeDelta(touch.clientX - start.x, touch.clientY - start.y);
+  const dx = touch.clientX - start.x;
+  const dy = touch.clientY - start.y;
+  if (Math.hypot(dx, dy) > MILK_CHART_HOLD_MOVE_TOLERANCE_PX)
+    suppressNextMilkChartClick();
+  handleMilkChartSwipeDelta(dx, dy);
 }
 
 function renderExpressingTrend(activeParents) {
@@ -8393,7 +8853,14 @@ function wireApp() {
     selectMilkStatsRange(btn.dataset.milkChartRange);
     renderCharts();
   });
-  chartsContent.addEventListener('input', (event) => {
+  const handleChartsInput = (event) => {
+    const periodInput = event.target.closest(
+      '[data-milk-chart-period-input]',
+    );
+    if (periodInput) {
+      if (setMilkStatsPeriodFromInput(periodInput.value)) renderCharts();
+      return;
+    }
     const expressInput = event.target.closest('[data-express-chart-date]');
     if (expressInput) {
       setExpressStatsCustomRange(
@@ -8416,7 +8883,9 @@ function wireApp() {
     if (!input) return;
     setMilkStatsCustomRange(input.dataset.milkChartDate, input.value);
     renderCharts();
-  });
+  };
+  chartsContent.addEventListener('input', handleChartsInput);
+  chartsContent.addEventListener('change', handleChartsInput);
   document.getElementById('sync-now-btn').addEventListener('click', () => {
     syncNow({ quiet: false, force: true }).catch(() => {});
   });

@@ -1966,9 +1966,33 @@ main::before {
 }
 
 .charts-milk-period-copy {
+  position: relative;
+  display: block;
   min-width: 0;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
   text-align: center;
   line-height: 1.16;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.charts-milk-period-copy:active {
+  opacity: 0.72;
+}
+
+.charts-milk-period-copy:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.charts-milk-period-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .charts-milk-period-kicker {
@@ -2082,6 +2106,10 @@ main::before {
   opacity: 0.35;
 }
 
+.charts-milk-metric--bucket .charts-milk-metric-feeds {
+  color: var(--accent);
+}
+
 .charts-milk-metric:disabled {
   cursor: default;
 }
@@ -2165,6 +2193,53 @@ main::before {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: pan-y;
+}
+
+.charts-milk-scroll-rail {
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+  width: 100%;
+  height: 18px;
+  margin: -2px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+}
+
+.charts-milk-scroll-rail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.charts-milk-scroll-rail::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-tint);
+}
+
+.charts-milk-scroll-rail::-webkit-slider-thumb {
+  width: 28px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.charts-milk-scroll-rail::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-tint);
+}
+
+.charts-milk-scroll-rail::-moz-range-thumb {
+  width: 28px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .charts-milk-empty {
